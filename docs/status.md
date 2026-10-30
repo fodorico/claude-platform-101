@@ -15,13 +15,16 @@
   (2026-10-30).
 - Manage chats from the history: rename, archive/unarchive, delete (with confirmation), and
   select several to archive or delete at once (2026-10-30).
+- Chat polish: stop, regenerate and edit the last message, retry on error; chat title with
+  Markdown export; history search; keyboard shortcuts; code highlighting with copy; short model
+  names; scroll-to-latest; per-chat totals in the details panel (2026-10-30).
 
 ## Next
 
 - Continuous deployment: hosting target not chosen yet (options considered: Google Cloud Run,
   Render, a VPS). Images are already published to GHCR on every merge to main.
 - Try it with a real `ANTHROPIC_API_KEY`.
-- Ideas as the course advances: multi-turn conversations, tool use, an MCP server
+- Ideas as the course advances: tool use, an MCP server
   (Building with the Claude API / Intro to MCP).
 
 ## Open questions

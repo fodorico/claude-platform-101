@@ -12,17 +12,23 @@ interface AnswerStreamState {
   prompt: string | null
   /** The conversation it was sent to; null for a new one. */
   conversationId: number | null
+  /** The exchange this answer will replace (regenerate or edit), hidden meanwhile. */
+  replacesId: number | null
   /** The answer received so far. */
   reply: string
   isStreaming: boolean
+  /** The user stopped the answer: what arrived stays on screen but was not saved. */
+  stopped: boolean
   error: unknown
 }
 
 const idle: AnswerStreamState = {
   prompt: null,
   conversationId: null,
+  replacesId: null,
   reply: '',
   isStreaming: false,
+  stopped: false,
   error: null,
 }
 
@@ -31,24 +37,28 @@ interface SendOptions {
   onStored?: (exchange: ExchangeRead) => void
 }
 
-/** Streams an answer and adds the stored exchange to its conversation's cached messages. */
+/** Streams an answer and puts the stored exchange in its conversation's cached messages. */
 export function useAnswerStream() {
   const queryClient = useQueryClient()
   const [state, setState] = useState<AnswerStreamState>(idle)
   const abortRef = useRef<AbortController | null>(null)
+  const lastRef = useRef<{ message: MessageCreate; options: SendOptions } | null>(null)
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  /** Resolves when the answer is complete; rejects (and keeps the error) when it fails. */
+  /** Resolves when the answer is complete or stopped; rejects (and keeps the error) when it
+   * fails. */
   const send = useCallback(
-    async (message: MessageCreate, { onStored }: SendOptions = {}) => {
+    async (message: MessageCreate, options: SendOptions = {}) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      lastRef.current = { message, options }
       setState({
         ...idle,
         prompt: message.content,
         conversationId: message.conversation_id ?? null,
+        replacesId: message.replaces_id ?? null,
         isStreaming: true,
       })
 
@@ -59,13 +69,16 @@ export function useAnswerStream() {
             setState((current) => ({ ...current, reply: current.reply + text }))
           },
           onDone: (exchange) => {
-            // The stored exchange replaces the streamed one without refetching.
+            // The stored exchange takes the place of the streamed one without refetching.
             queryClient.setQueryData<ExchangeRead[]>(
               getListConversationMessagesQueryKey(exchange.conversation_id),
-              (messages) => [...(messages ?? []), exchange],
+              (messages) => [
+                ...(messages ?? []).filter((item) => item.id !== message.replaces_id),
+                exchange,
+              ],
             )
             setState(idle)
-            onStored?.(exchange)
+            options.onStored?.(exchange)
             void queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() })
           },
           onTitle: () => {
@@ -74,6 +87,7 @@ export function useAnswerStream() {
         })
       } catch (error) {
         if (controller.signal.aborted) return
+        // The text stays in the message box for a retry, so nothing is shown here.
         setState({ ...idle, error })
         throw error
       }
@@ -81,5 +95,24 @@ export function useAnswerStream() {
     [queryClient],
   )
 
-  return { ...state, send }
+  /** Stop the answer being written; the server stores nothing for it. */
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    setState((current) =>
+      current.isStreaming ? { ...current, isStreaming: false, stopped: true } : current,
+    )
+  }, [])
+
+  /** Send the last message again, e.g. after an error. */
+  const retry = useCallback(() => {
+    const last = lastRef.current
+    return last ? send(last.message, last.options) : Promise.resolve()
+  }, [send])
+
+  /** Forget a stopped or failed answer. */
+  const clear = useCallback(() => {
+    setState(idle)
+  }, [])
+
+  return { ...state, send, stop, retry, clear }
 }

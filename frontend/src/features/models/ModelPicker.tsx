@@ -1,5 +1,6 @@
 import { useGetModelSettings } from '../../api/generated/api'
 import { PROVIDER_LABELS, useModelChoice, type Provider } from './modelChoice'
+import { modelLabel } from './modelLabel'
 
 /** Pick the provider and model; providers without an API key are shown but disabled. */
 export function ModelPicker() {
@@ -10,7 +11,7 @@ export function ModelPicker() {
   return (
     <select
       aria-label="Model"
-      className="select select-sm w-36 rounded-full sm:w-52"
+      className="select select-sm w-32 rounded-full sm:w-40"
       value={choice ? `${choice.provider}:${choice.model}` : ''}
       disabled={!choice}
       onChange={(event) => {
@@ -27,8 +28,13 @@ export function ModelPicker() {
           }`}
         >
           {provider.models.map((model) => (
-            <option key={model} value={`${provider.name}:${model}`} disabled={!provider.available}>
-              {model}
+            <option
+              key={model}
+              value={`${provider.name}:${model}`}
+              disabled={!provider.available}
+              title={model}
+            >
+              {modelLabel(model)}
             </option>
           ))}
         </optgroup>

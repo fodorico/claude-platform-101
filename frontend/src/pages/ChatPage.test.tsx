@@ -51,7 +51,25 @@ const modelSettings = {
   system_prompt: 'Answer briefly.',
 }
 
-type StreamOutcome = { ok: true } | { ok: false; detail: string; status: number }
+type StreamOutcome =
+  | { ok: true }
+  | { ok: false; detail: string; status: number }
+  // Sends one delta and then waits until the request is aborted.
+  | { ok: 'hang' }
+
+/** A stream that sends one delta and stays open until the request is aborted. */
+function hangingResponse(signal: AbortSignal | null | undefined): Response {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`event: delta\ndata: {"text":"Half an answer"}\n\n`))
+      signal?.addEventListener('abort', () => {
+        controller.error(new DOMException('Aborted', 'AbortError'))
+      })
+    },
+  })
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+}
 
 interface FakeChat {
   conversation: ConversationRead
@@ -70,7 +88,12 @@ function mockApi(
     const { pathname, searchParams } = new URL(url, 'http://test')
     if (pathname === '/api/conversations') {
       const archived = searchParams.get('archived') === 'true'
-      const listed = chats.filter((chat) => (chat.conversation.archived_at !== null) === archived)
+      const q = searchParams.get('q')?.toLowerCase()
+      const listed = chats.filter(
+        (chat) =>
+          (chat.conversation.archived_at !== null) === archived &&
+          (!q || chat.conversation.title.toLowerCase().includes(q)),
+      )
       return Promise.resolve(jsonResponse(listed.map((chat) => chat.conversation)))
     }
     if (pathname === '/api/conversations/bulk') {
@@ -94,6 +117,12 @@ function mockApi(
       }
       return Promise.resolve(jsonResponse(chat?.conversation))
     }
+    if (chatMatch) {
+      const chat = chats.find((item) => item.conversation.id === Number(chatMatch[1]))
+      return Promise.resolve(
+        chat ? jsonResponse(chat.conversation) : jsonResponse({ detail: 'Not found' }, 404),
+      )
+    }
     const messagesMatch = /^\/api\/conversations\/(\d+)\/messages$/.exec(url)
     if (messagesMatch) {
       const chat = chats.find((item) => item.conversation.id === Number(messagesMatch[1]))
@@ -105,6 +134,7 @@ function mockApi(
     const body = JSON.parse(init?.body as string) as MessageCreate
     sent.push(body)
     const result = outcome(body.content)
+    if (result.ok === 'hang') return Promise.resolve(hangingResponse(init?.signal))
     if (!result.ok) {
       return Promise.resolve(
         sseResponse([
@@ -120,6 +150,7 @@ function mockApi(
       chats.unshift(chat)
     }
     const stored = exchange(nextId++, chat.conversation.id, body.content)
+    chat.messages = chat.messages.filter((item) => item.id !== body.replaces_id)
     chat.messages.push(stored)
     const events: [string, unknown][] = [
       ['delta', { text: 'Reply to ' }],
@@ -176,7 +207,7 @@ describe('ChatPage', () => {
     const router = renderApp()
     expect(await screen.findByText(/No messages yet/)).toBeInTheDocument()
     // Claude has no API key, so the API default falls back to Gemini.
-    await screen.findByRole('option', { name: 'gemini-test', selected: true })
+    await screen.findByRole('option', { name: 'Test', selected: true })
 
     await user.selectOptions(screen.getByLabelText('Model'), 'gemini:gemini-other')
     await user.type(screen.getByLabelText('Message'), 'Hello{Enter}')
@@ -189,8 +220,20 @@ describe('ChatPage', () => {
     expect(await screen.findByText('Reply to Again')).toBeInTheDocument()
 
     expect(sent).toEqual([
-      { content: 'Hello', conversation_id: null, provider: 'gemini', model: 'gemini-other' },
-      { content: 'Again', conversation_id: 100, provider: 'gemini', model: 'gemini-other' },
+      {
+        content: 'Hello',
+        conversation_id: null,
+        provider: 'gemini',
+        model: 'gemini-other',
+        replaces_id: null,
+      },
+      {
+        content: 'Again',
+        conversation_id: 100,
+        provider: 'gemini',
+        model: 'gemini-other',
+        replaces_id: null,
+      },
     ])
     expect(JSON.parse(localStorage.getItem('model') ?? '{}')).toEqual({
       provider: 'gemini',
@@ -202,7 +245,7 @@ describe('ChatPage', () => {
     mockApi()
     renderApp()
 
-    expect(await screen.findByRole('option', { name: 'claude-opus-5-5' })).toBeDisabled()
+    expect(await screen.findByRole('option', { name: 'Opus 5.5' })).toBeDisabled()
     expect(screen.getByRole('group', { name: 'Claude (no API key)' })).toBeInTheDocument()
   })
 
@@ -351,6 +394,210 @@ describe('ChatPage', () => {
     expect(within(details).getByText('850 ms')).toBeInTheDocument()
     expect(within(details).getByText('7')).toBeInTheDocument()
     expect(await within(details).findByText('Answer briefly.')).toBeInTheDocument()
+  })
+
+  describe('controlling the answer', () => {
+    it('stops an answer and keeps what arrived, unsaved', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi([mcpChat()], () => ({ ok: 'hang' }))
+      renderApp('/?chat=1')
+
+      await user.type(await screen.findByLabelText('Message'), 'Long one{Enter}')
+      expect(await screen.findByText('Half an answer')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Stop answering' }))
+
+      expect(await screen.findByText("Stopped. This answer wasn't saved.")).toBeInTheDocument()
+      expect(screen.getByText('Half an answer')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+      expect(sent).toHaveLength(1)
+    })
+
+    it('regenerates the last answer in place', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi([mcpChat()])
+      renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      // Only the last answer can be regenerated.
+      const [regenerate, ...others] = screen.getAllByRole('button', { name: 'Regenerate answer' })
+      expect(others).toEqual([])
+      if (regenerate) await user.click(regenerate)
+
+      await waitFor(() => {
+        expect(screen.getAllByText('And tools?')).toHaveLength(1)
+      })
+      expect(sent).toEqual([expect.objectContaining({ content: 'And tools?', replaces_id: 2 })])
+    })
+
+    it('edits and resends the last question', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi([mcpChat()])
+      renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      expect(screen.getAllByRole('button', { name: 'Edit question' })).toHaveLength(1)
+      await user.click(screen.getByRole('button', { name: 'Edit question' }))
+      const box = screen.getByLabelText('Message')
+      expect(box).toHaveValue('And tools?')
+      expect(screen.getByText('Editing your last message')).toBeInTheDocument()
+
+      await user.clear(box)
+      await user.type(box, 'And resources?{Enter}')
+
+      expect(await screen.findByText('Reply to And resources?')).toBeInTheDocument()
+      expect(screen.queryByText('Reply to And tools?')).not.toBeInTheDocument()
+      expect(screen.queryByText('Editing your last message')).not.toBeInTheDocument()
+      expect(sent).toEqual([
+        expect.objectContaining({ content: 'And resources?', conversation_id: 1, replaces_id: 2 }),
+      ])
+    })
+
+    it('cancels an edit', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      renderApp('/?chat=1')
+
+      await user.click(await screen.findByRole('button', { name: 'Edit question' }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.getByLabelText('Message')).toHaveValue('')
+      expect(screen.queryByText('Editing your last message')).not.toBeInTheDocument()
+    })
+
+    it('retries a failed message', async () => {
+      const user = userEvent.setup()
+      let failures = 1
+      const sent = mockApi([], () =>
+        failures-- > 0
+          ? { ok: false, detail: 'The Gemini API returned an error', status: 503 }
+          : { ok: true },
+      )
+      renderApp()
+
+      await user.type(await screen.findByLabelText('Message'), 'Hello{Enter}')
+      await user.click(await screen.findByRole('button', { name: 'Retry' }))
+
+      expect(await screen.findByText('Reply to Hello')).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Message')).toHaveValue('')
+      expect(sent).toHaveLength(2)
+    })
+  })
+
+  it('shows the chat title and exports the chat as Markdown', async () => {
+    const user = userEvent.setup()
+    mockApi([mcpChat()])
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:chat')
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    renderApp('/?chat=1')
+
+    expect(await screen.findByRole('heading', { name: 'About MCP' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Export chat as Markdown' }))
+
+    expect(click).toHaveBeenCalledOnce()
+    const markdown = await createObjectURL.mock.calls[0]?.[0].text()
+    expect(markdown).toContain('# About MCP')
+    expect(markdown).toContain('Reply to And tools?')
+    click.mockRestore()
+  })
+
+  it('shows the totals of the open chat in the details', async () => {
+    const chat = mcpChat()
+    chat.messages[0] = { ...chat.messages[0], model: 'gemini-other' } as ExchangeRead
+    mockApi([chat])
+    localStorage.setItem('panels', JSON.stringify({ history: false, details: true }))
+    renderApp('/?chat=1')
+
+    const details = await screen.findByRole('complementary', { name: 'Request details' })
+    const totals = await within(details).findByRole('region', { name: 'This chat' })
+    expect(within(totals).getByText('Messages', { selector: 'dt' }).nextSibling).toHaveTextContent(
+      '2',
+    )
+    expect(
+      within(totals).getByText('Input tokens', { selector: 'dt' }).nextSibling,
+    ).toHaveTextContent('24')
+    expect(
+      within(totals).getByText('Total time', { selector: 'dt' }).nextSibling,
+    ).toHaveTextContent('2.4 s')
+    const byModel = within(totals).getByRole('table', { name: 'Usage by model' })
+    expect(within(byModel).getByRole('row', { name: 'Other 1 12 / 34' })).toBeInTheDocument()
+    expect(within(byModel).getByRole('row', { name: 'Test 1 12 / 34' })).toBeInTheDocument()
+  })
+
+  it('searches the chats in the history', async () => {
+    const user = userEvent.setup()
+    mockApi([mcpChat(), { conversation: conversation(2, 'Prompt tips'), messages: [] }])
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: 'History' }))
+    const history = screen.getByRole('complementary', { name: 'History' })
+    await within(history).findByRole('button', { name: 'Prompt tips' })
+    await user.type(within(history).getByRole('searchbox', { name: 'Search chats' }), 'mcp')
+
+    await waitFor(() => {
+      expect(within(history).queryByRole('button', { name: 'Prompt tips' })).not.toBeInTheDocument()
+    })
+    expect(await within(history).findByRole('button', { name: 'About MCP' })).toBeInTheDocument()
+
+    await user.clear(within(history).getByRole('searchbox', { name: 'Search chats' }))
+    await user.type(within(history).getByRole('searchbox', { name: 'Search chats' }), 'nothing')
+    expect(await within(history).findByText('No chats match your search.')).toBeInTheDocument()
+  })
+
+  describe('keyboard shortcuts', () => {
+    it('opens the history search with Ctrl+K', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      renderApp()
+      await screen.findByLabelText('Message')
+
+      await user.keyboard('{Control>}k{/Control}')
+
+      const search = await screen.findByRole('searchbox', { name: 'Search chats' })
+      await waitFor(() => {
+        expect(search).toHaveFocus()
+      })
+    })
+
+    it('starts a new chat with Ctrl+Shift+O', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      const router = renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      await user.keyboard('{Control>}{Shift>}o{/Shift}{/Control}')
+
+      await waitFor(() => {
+        expect(router.state.location.search).toBe('')
+      })
+      expect(await screen.findByText(/No messages yet/)).toBeInTheDocument()
+    })
+
+    it('focuses the message box with / and lists the shortcuts with ?', async () => {
+      const user = userEvent.setup()
+      mockApi()
+      renderApp()
+      const box = await screen.findByLabelText('Message')
+
+      await user.keyboard('/')
+      await waitFor(() => {
+        expect(box).toHaveFocus()
+      })
+      expect(box).toHaveValue('')
+
+      // Typed in the message box, "?" is just text.
+      await user.keyboard('?')
+      expect(box).toHaveValue('?')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      box.blur()
+      await user.keyboard('?')
+      const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' })
+      expect(within(dialog).getByText('Search chats')).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
   describe('managing chats in the history', () => {

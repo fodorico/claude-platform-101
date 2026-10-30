@@ -1,4 +1,4 @@
-import { Check, Copy, Info, Sparkles } from 'lucide-react'
+import { Check, Copy, Info, Pencil, RotateCcw, Sparkles } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import type { ExchangeRead } from '../../api/generated/model'
@@ -7,9 +7,19 @@ import { Markdown } from './Markdown'
 
 const appear = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 } }
 
-export function UserBubble({ text }: { text: string }) {
+export function UserBubble({ text, onEdit }: { text: string; onEdit?: () => void }) {
   return (
-    <motion.div {...appear} className="flex justify-end">
+    <motion.div {...appear} className="flex items-start justify-end gap-1">
+      {onEdit && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-square btn-sm mt-1"
+          aria-label="Edit question"
+          onClick={onEdit}
+        >
+          <Pencil aria-hidden className="size-4" />
+        </button>
+      )}
       <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-base-300 px-4 py-2.5 whitespace-pre-wrap">
         {text}
       </div>
@@ -47,8 +57,12 @@ interface AssistantMessageProps {
   exchange?: ExchangeRead
   isSelected?: boolean
   onShowDetails?: () => void
+  /** Offered on the last answer: ask the same question again. */
+  onRegenerate?: () => void
   /** True while the answer is still arriving. */
   isStreaming?: boolean
+  /** The user stopped this answer; it was not saved. */
+  stopped?: boolean
 }
 
 export function AssistantMessage({
@@ -56,7 +70,9 @@ export function AssistantMessage({
   exchange,
   isSelected,
   onShowDetails,
+  onRegenerate,
   isStreaming,
+  stopped,
 }: AssistantMessageProps) {
   return (
     <motion.div {...appear} className="flex gap-3">
@@ -72,9 +88,22 @@ export function AssistantMessage({
         {isStreaming && (
           <span className="loading loading-dots loading-sm text-primary" aria-label="Writing" />
         )}
+        {stopped && (
+          <p className="pb-1 text-xs text-base-content/80">Stopped. This answer wasn't saved.</p>
+        )}
         {exchange && (
           <div className="-ml-2 flex flex-wrap items-center gap-1 pb-1">
             <CopyButton text={text} />
+            {onRegenerate && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-square btn-sm"
+                aria-label="Regenerate answer"
+                onClick={onRegenerate}
+              >
+                <RotateCcw aria-hidden className="size-4" />
+              </button>
+            )}
             {onShowDetails && (
               <button
                 type="button"

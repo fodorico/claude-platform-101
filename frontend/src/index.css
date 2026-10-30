@@ -12,3 +12,28 @@ body,
 #root {
   height: 100%;
 }
+
+/* Syntax highlighting (rehype-highlight / highlight.js classes) from the theme's colors, so code
+   reads well in both themes. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-literal {
+  color: color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content));
+  font-weight: 600;
+}
+.hljs-string,
+.hljs-attr,
+.hljs-template-variable {
+  color: color-mix(in oklab, var(--color-success) 55%, var(--color-base-content));
+}
+.hljs-number,
+.hljs-type,
+.hljs-title {
+  color: color-mix(in oklab, var(--color-secondary) 45%, var(--color-base-content));
+}
+.hljs-comment,
+.hljs-quote {
+  color: color-mix(in oklab, var(--color-base-content) 80%, transparent);
+  font-style: italic;
+}

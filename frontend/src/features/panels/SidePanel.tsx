@@ -41,7 +41,12 @@ export function SidePanel({ side, title, onClose, children }: SidePanelProps) {
             <X aria-hidden className="size-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">{children}</div>
+        <div
+          tabIndex={0}
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          {children}
+        </div>
       </aside>
     </>
   )
