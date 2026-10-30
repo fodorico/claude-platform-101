@@ -10,7 +10,8 @@ and shown as a history.
   SQLAlchemy 2 (async) + Alembic, Anthropic Python SDK and Google Gen AI SDK. Ruff, mypy
   (strict), pytest + Testcontainers.
 - **Frontend** (`frontend/`): React + TypeScript (strict), Vite, React Router, TanStack Query,
-  React Hook Form + Zod, Tailwind CSS + daisyUI, lucide-react, Motion. ESLint, Prettier, Vitest.
+  React Hook Form + Zod, Tailwind CSS + daisyUI, lucide-react, Motion. ESLint, Prettier, Vitest,
+  Playwright + axe.
   Served by nginx in production.
 - **API contract**: the frontend client (`frontend/src/api/generated/`) is generated with orval
   from the backend OpenAPI schema. Never edit it by hand.
@@ -57,6 +58,7 @@ Git hooks: `cd backend && uv run pre-commit install`.
 | Format | `uv run ruff format .` | `npm run format` |
 | Types | `uv run mypy` | `npm run typecheck` |
 | Tests | `uv run pytest` (needs Docker) | `npm test` |
+| End-to-end + accessibility | — | `npm run test:e2e` (first time: `npx playwright install chromium`) |
 
 ## API
 

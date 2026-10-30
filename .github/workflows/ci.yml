@@ -49,6 +49,32 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  e2e:
+    # Browser tests (desktop + mobile) and axe accessibility scans against the production build.
+    # The API is mocked in the browser, so no backend or database runs here.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
+
   api-contract:
     # Fails when the backend API changed but the generated frontend client was not regenerated.
     runs-on: ubuntu-latest
@@ -81,7 +107,7 @@ jobs:
     # The job name is a required check on main (scripts/protect-main.sh in workspace-setup).
     name: docker (${{ matrix.service }})
     runs-on: ubuntu-latest
-    needs: [backend, frontend, api-contract]
+    needs: [backend, frontend, e2e, api-contract]
     permissions:
       contents: read
       packages: write

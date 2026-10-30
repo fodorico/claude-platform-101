@@ -30,3 +30,8 @@
   bottom, Enter to send). Answers render as Markdown with react-markdown + remark-gfm (raw HTML is
   not rendered) and Tailwind Typography. daisyUI themes `nord` (light) and `dim` (dark): system
   preference by default, toggle saved in localStorage.
+- **2026-10-30 — End-to-end and accessibility tests.** Playwright runs the user flows against the
+  production build (`vite preview`) on a desktop and a mobile viewport, and axe checks WCAG 2.2 A/AA
+  on every screen state in both themes. The API is mocked in the browser (`e2e/mock-api.ts`), so
+  the suite needs no backend or database and stays fast; the backend keeps its own integration
+  tests. Runs as the `e2e` CI job (report uploaded on failure).
