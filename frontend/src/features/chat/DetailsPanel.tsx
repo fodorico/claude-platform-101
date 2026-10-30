@@ -1,5 +1,6 @@
 import { useGetModelSettings } from '../../api/generated/api'
 import type { ExchangeRead } from '../../api/generated/model'
+import { PROVIDER_LABELS } from '../models/modelChoice'
 import { SidePanel } from '../panels/SidePanel'
 import { formatDuration } from './format'
 
@@ -51,6 +52,10 @@ export function DetailsPanel({ exchange, isStreaming, onClose }: DetailsPanelPro
                 <Metric label="Output tokens" value={String(exchange.output_tokens)} />
               </dl>
               <dl className="flex flex-col gap-2 text-sm">
+                <Row
+                  label="Provider"
+                  value={PROVIDER_LABELS[exchange.provider] ?? exchange.provider}
+                />
                 <Row label="Model" value={exchange.model} mono />
                 <Row label="Stop reason" value={exchange.stop_reason} mono />
               </dl>
@@ -69,8 +74,6 @@ export function DetailsPanel({ exchange, isStreaming, onClose }: DetailsPanelPro
           {settings.data && (
             <>
               <dl className="flex flex-col gap-2 text-sm">
-                <Row label="Provider" value={settings.data.provider} />
-                <Row label="Model" value={settings.data.model} mono />
                 <Row label="Max tokens" value={String(settings.data.max_tokens)} />
               </dl>
               <div className="flex flex-col gap-1">

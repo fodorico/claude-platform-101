@@ -1,8 +1,42 @@
 {
   "components": {
     "schemas": {
+      "ConversationRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationRead",
+        "type": "object"
+      },
       "ExchangeRead": {
         "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -50,6 +84,10 @@
             "title": "Prompt",
             "type": "string"
           },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
           "reply": {
             "title": "Reply",
             "type": "string"
@@ -61,8 +99,10 @@
         },
         "required": [
           "id",
+          "conversation_id",
           "prompt",
           "reply",
+          "provider",
           "model",
           "stop_reason",
           "input_tokens",
@@ -107,6 +147,44 @@
             "minLength": 1,
             "title": "Content",
             "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "claude",
+                  "gemini"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           }
         },
         "required": [
@@ -116,19 +194,22 @@
         "type": "object"
       },
       "ModelSettingsRead": {
-        "description": "How the API calls the model, shown in the frontend's request details panel.",
+        "description": "The models a message can be sent to and the settings shared by every request.",
         "properties": {
+          "default_provider": {
+            "title": "Default Provider",
+            "type": "string"
+          },
           "max_tokens": {
             "title": "Max Tokens",
             "type": "integer"
           },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": "string"
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderRead"
+            },
+            "title": "Providers",
+            "type": "array"
           },
           "system_prompt": {
             "title": "System Prompt",
@@ -136,12 +217,38 @@
           }
         },
         "required": [
-          "provider",
-          "model",
+          "default_provider",
+          "providers",
           "max_tokens",
           "system_prompt"
         ],
         "title": "ModelSettingsRead",
+        "type": "object"
+      },
+      "ProviderRead": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "available",
+          "models"
+        ],
+        "title": "ProviderRead",
         "type": "object"
       },
       "ValidationError": {
@@ -192,6 +299,103 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/conversations": {
+      "get": {
+        "description": "Return the conversations with the most recent activity first.",
+        "operationId": "list_conversations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationRead"
+                  },
+                  "title": "Response List Conversations",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Conversations",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/conversations/{conversation_id}/messages": {
+      "get": {
+        "description": "Return a conversation's exchanges, oldest first.",
+        "operationId": "list_conversation_messages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExchangeRead"
+                  },
+                  "title": "Response List Conversation Messages",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Conversation Messages",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Liveness and database connectivity check.",
@@ -215,56 +419,8 @@
       }
     },
     "/api/messages": {
-      "get": {
-        "description": "Return the most recent exchanges, newest first.",
-        "operationId": "list_messages",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ExchangeRead"
-                  },
-                  "title": "Response List Messages",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Messages",
-        "tags": [
-          "messages"
-        ]
-      },
       "post": {
-        "description": "Send a message to the configured model, store the exchange and return it.",
+        "description": "Send a message to the chosen model, store the exchange and return it. A message\nwithout a conversation starts one, and the model then writes its title.",
         "operationId": "send_message",
         "requestBody": {
           "content": {
@@ -323,7 +479,7 @@
             "content": {
               "text/event-stream": {}
             },
-            "description": "Server-sent events: `delta` (StreamDelta) for each piece of the answer, then `done` (ExchangeRead) once it is stored, or `error` (StreamError)."
+            "description": "Server-sent events: `delta` (StreamDelta) for each piece of the answer, then `done` (ExchangeRead) once it is stored, then \u2014 for a new conversation \u2014 `title` (StreamTitle); or `error` (StreamError)."
           },
           "422": {
             "content": {
@@ -344,7 +500,7 @@
     },
     "/api/model-settings": {
       "get": {
-        "description": "Return the provider, model and request settings used to answer messages.",
+        "description": "Return the providers and models a message can be sent to, and the shared settings.",
         "operationId": "get_model_settings",
         "responses": {
           "200": {

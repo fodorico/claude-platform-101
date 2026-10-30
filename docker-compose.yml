@@ -21,9 +21,11 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_MODELS: ${ANTHROPIC_MODELS:-}
       ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GEMINI_MODELS: ${GEMINI_MODELS:-}
     depends_on:
       db:
         condition: service_healthy

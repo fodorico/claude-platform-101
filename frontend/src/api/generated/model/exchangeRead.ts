@@ -6,6 +6,7 @@
  */
 
 export interface ExchangeRead {
+  conversation_id: number
   created_at: string
   duration_ms: number | null
   first_token_ms: number | null
@@ -14,6 +15,7 @@ export interface ExchangeRead {
   model: string
   output_tokens: number
   prompt: string
+  provider: string
   reply: string
   stop_reason: string
 }

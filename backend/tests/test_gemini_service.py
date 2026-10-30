@@ -7,7 +7,16 @@ import pytest
 from google.genai import errors, types
 
 from app.services.gemini import GeminiService
-from app.services.llm import LLMRateLimitError, LLMRefusalError, LLMReply, LLMUnavailableError
+from app.services.llm import (
+    LLMRateLimitError,
+    LLMRefusalError,
+    LLMReply,
+    LLMUnavailableError,
+    Turn,
+)
+
+HI = [Turn("user", "Hi")]
+USER_HI = [types.Content(role="user", parts=[types.Part(text="Hi")])]
 
 
 class StubModels:
@@ -48,7 +57,6 @@ def make_service(
     models = StubModels(result)
     service = GeminiService(
         StubClient(models),  # type: ignore[arg-type]
-        model="gemini-flash-latest",
         max_tokens=1000,
         system_prompt="Be brief.",
     )
@@ -73,14 +81,14 @@ def response(**overrides: Any) -> types.GenerateContentResponse:
 async def test_ask_sends_configured_request_and_returns_reply() -> None:
     service, models = make_service(response())
 
-    reply = await service.ask("Hi")
+    reply = await service.ask(HI, model="gemini-flash-latest")
 
     assert reply.text == "Hello there"
     assert (reply.model, reply.stop_reason) == ("gemini-3.8-flash", "STOP")
     assert (reply.input_tokens, reply.output_tokens) == (12, 3)
     [call] = models.calls
     assert call["model"] == "gemini-flash-latest"
-    assert call["contents"] == "Hi"
+    assert call["contents"] == USER_HI
     assert call["config"].system_instruction == "Be brief."
     assert call["config"].max_output_tokens == 1000
 
@@ -96,7 +104,7 @@ async def test_ask_raises_on_refusal(result: types.GenerateContentResponse) -> N
     service, _ = make_service(result)
 
     with pytest.raises(LLMRefusalError):
-        await service.ask("Hi")
+        await service.ask(HI, model="gemini-flash-latest")
 
 
 @pytest.mark.parametrize(
@@ -112,7 +120,7 @@ async def test_ask_maps_errors(error: Exception, expected_error: type[Exception]
     service, _ = make_service(error)
 
     with pytest.raises(expected_error):
-        await service.ask("Hi")
+        await service.ask(HI, model="gemini-flash-latest")
 
 
 def chunk(
@@ -128,14 +136,14 @@ async def test_stream_yields_text_then_reply() -> None:
     service, models = make_service(response())
     models.chunks = [chunk("Hel"), chunk("lo", finish_reason="STOP")]
 
-    items = [item async for item in service.stream("Hi")]
+    items = [item async for item in service.stream(HI, model="gemini-flash-latest")]
 
     assert items[:-1] == ["Hel", "lo"]
     reply = items[-1]
     assert isinstance(reply, LLMReply)
     assert (reply.text, reply.stop_reason, reply.model) == ("Hello", "STOP", "gemini-3.8-flash")
     assert (reply.input_tokens, reply.output_tokens) == (12, 3)
-    assert models.calls[0]["contents"] == "Hi"
+    assert models.calls[0]["contents"] == USER_HI
 
 
 async def test_stream_raises_on_refusal_after_text() -> None:
@@ -144,7 +152,7 @@ async def test_stream_raises_on_refusal_after_text() -> None:
 
     received: list[object] = []
     with pytest.raises(LLMRefusalError):
-        async for item in service.stream("Hi"):
+        async for item in service.stream(HI, model="gemini-flash-latest"):
             received.append(item)
     assert received == ["Hel"]
 
@@ -153,5 +161,22 @@ async def test_stream_maps_errors() -> None:
     service, _ = make_service(errors.ServerError(503, {"error": {"message": "overloaded"}}))
 
     with pytest.raises(LLMUnavailableError):
-        async for _ in service.stream("Hi"):
+        async for _ in service.stream(HI, model="gemini-flash-latest"):
             pass
+
+
+async def test_ask_sends_the_conversation_and_overrides() -> None:
+    service, models = make_service(response())
+    turns = [Turn("user", "Hi"), Turn("assistant", "Hello"), Turn("user", "More")]
+
+    await service.ask(turns, model="gemini-flash-lite-latest", system="Title only.", max_tokens=50)
+
+    [call] = models.calls
+    assert call["model"] == "gemini-flash-lite-latest"
+    assert [(content.role, content.parts[0].text) for content in call["contents"]] == [
+        ("user", "Hi"),
+        ("model", "Hello"),
+        ("user", "More"),
+    ]
+    assert call["config"].system_instruction == "Title only."
+    assert call["config"].max_output_tokens == 50

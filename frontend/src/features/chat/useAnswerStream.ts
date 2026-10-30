@@ -1,20 +1,37 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getListMessagesQueryKey } from '../../api/generated/api'
+import {
+  getListConversationMessagesQueryKey,
+  getListConversationsQueryKey,
+} from '../../api/generated/api'
+import type { ExchangeRead, MessageCreate } from '../../api/generated/model'
 import { streamAnswer } from '../../api/stream'
 
 interface AnswerStreamState {
   /** The message being answered, or null when idle. */
   prompt: string | null
+  /** The conversation it was sent to; null for a new one. */
+  conversationId: number | null
   /** The answer received so far. */
   reply: string
   isStreaming: boolean
   error: unknown
 }
 
-const idle: AnswerStreamState = { prompt: null, reply: '', isStreaming: false, error: null }
+const idle: AnswerStreamState = {
+  prompt: null,
+  conversationId: null,
+  reply: '',
+  isStreaming: false,
+  error: null,
+}
 
-/** Streams an answer and refreshes the history once the exchange is stored. */
+interface SendOptions {
+  /** Called once the exchange is stored, e.g. to open the conversation it started. */
+  onStored?: (exchange: ExchangeRead) => void
+}
+
+/** Streams an answer and adds the stored exchange to its conversation's cached messages. */
 export function useAnswerStream() {
   const queryClient = useQueryClient()
   const [state, setState] = useState<AnswerStreamState>(idle)
@@ -24,22 +41,37 @@ export function useAnswerStream() {
 
   /** Resolves when the answer is complete; rejects (and keeps the error) when it fails. */
   const send = useCallback(
-    async (content: string) => {
+    async (message: MessageCreate, { onStored }: SendOptions = {}) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
-      setState({ prompt: content, reply: '', isStreaming: true, error: null })
+      setState({
+        ...idle,
+        prompt: message.content,
+        conversationId: message.conversation_id ?? null,
+        isStreaming: true,
+      })
 
       try {
-        await streamAnswer(content, {
+        await streamAnswer(message, {
           signal: controller.signal,
           onDelta: (text) => {
             setState((current) => ({ ...current, reply: current.reply + text }))
           },
+          onDone: (exchange) => {
+            // The stored exchange replaces the streamed one without refetching.
+            queryClient.setQueryData<ExchangeRead[]>(
+              getListConversationMessagesQueryKey(exchange.conversation_id),
+              (messages) => [...(messages ?? []), exchange],
+            )
+            setState(idle)
+            onStored?.(exchange)
+            void queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() })
+          },
+          onTitle: () => {
+            void queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() })
+          },
         })
-        // Keep the streamed answer on screen until the history shows the stored exchange.
-        await queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey() })
-        setState(idle)
       } catch (error) {
         if (controller.signal.aborted) return
         setState({ ...idle, error })

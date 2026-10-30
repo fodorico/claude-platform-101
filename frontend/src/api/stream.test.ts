@@ -30,7 +30,7 @@ describe('streamAnswer', () => {
     )
     const deltas: string[] = []
 
-    const result = await streamAnswer('Hi', { onDelta: (text) => deltas.push(text) })
+    const result = await streamAnswer({ content: 'Hi' }, { onDelta: (text) => deltas.push(text) })
 
     expect(deltas).toEqual(['Hel', 'lo'])
     expect(result).toEqual(done)
@@ -43,7 +43,7 @@ describe('streamAnswer', () => {
       vi.fn(() => Promise.resolve(chunkedResponse([wire]))),
     )
 
-    await expect(streamAnswer('Hi', { onDelta: vi.fn() })).rejects.toEqual(
+    await expect(streamAnswer({ content: 'Hi' }, { onDelta: vi.fn() })).rejects.toEqual(
       new ApiError(429, 'Rate limit reached'),
     )
   })
@@ -54,7 +54,9 @@ describe('streamAnswer', () => {
       vi.fn(() => Promise.resolve(chunkedResponse(['event: delta\ndata: {"text":"Hel"}\n\n']))),
     )
 
-    await expect(streamAnswer('Hi', { onDelta: vi.fn() })).rejects.toBeInstanceOf(ApiError)
+    await expect(streamAnswer({ content: 'Hi' }, { onDelta: vi.fn() })).rejects.toBeInstanceOf(
+      ApiError,
+    )
   })
 
   it('throws the HTTP error when the request is rejected', async () => {
@@ -70,8 +72,30 @@ describe('streamAnswer', () => {
       ),
     )
 
-    await expect(streamAnswer('Hi', { onDelta: vi.fn() })).rejects.toEqual(
+    await expect(streamAnswer({ content: 'Hi' }, { onDelta: vi.fn() })).rejects.toEqual(
       new ApiError(400, 'Bad input'),
     )
+  })
+
+  it('reports the stored exchange, then the title of a new conversation', async () => {
+    const title = { conversation_id: 7, title: 'Greetings' }
+    const wire = `event: delta\ndata: {"text":"Hello"}\n\nevent: done\ndata: ${JSON.stringify(done)}\n\nevent: title\ndata: ${JSON.stringify(title)}\n\n`
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(chunkedResponse([wire]))),
+    )
+    const seen: string[] = []
+
+    const result = await streamAnswer(
+      { content: 'Hi' },
+      {
+        onDelta: () => seen.push('delta'),
+        onDone: () => seen.push('done'),
+        onTitle: (event) => seen.push(`title:${event.title}`),
+      },
+    )
+
+    expect(seen).toEqual(['delta', 'done', 'title:Greetings'])
+    expect(result).toEqual(done)
   })
 })

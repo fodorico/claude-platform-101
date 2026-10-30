@@ -4,13 +4,14 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ProviderRead } from './providerRead'
 
 /**
- * How the API calls the model, shown in the frontend's request details panel.
+ * The models a message can be sent to and the settings shared by every request.
  */
 export interface ModelSettingsRead {
+  default_provider: string
   max_tokens: number
-  model: string
-  provider: string
+  providers: ProviderRead[]
   system_prompt: string
 }

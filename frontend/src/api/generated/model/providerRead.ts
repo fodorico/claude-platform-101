@@ -5,10 +5,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListMessagesParams = {
-  /**
-   * @minimum 1
-   * @maximum 100
-   */
-  limit?: number
+export interface ProviderRead {
+  available: boolean
+  models: string[]
+  name: string
 }

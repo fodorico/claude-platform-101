@@ -62,10 +62,15 @@ Git hooks: `cd backend && uv run pre-commit install`.
 
 ## API
 
-- `POST /api/messages`: ask and get the stored exchange in one response.
-- `POST /api/messages/stream`: same, streamed as server-sent events (`delta`, then `done` or
-  `error`). The UI uses this one.
-- `GET /api/messages`: recent exchanges, newest first. Interactive docs at `/docs`.
+- `POST /api/messages`: send a message and get the stored exchange in one response. Body:
+  `content`, plus optional `conversation_id` (none starts a new chat), `provider` and `model`.
+  Earlier messages of the conversation are sent as context.
+- `POST /api/messages/stream`: same, streamed as server-sent events (`delta`, then `done`, then
+  `title` for a new chat; or `error`). The UI uses this one.
+- `GET /api/conversations`: chats, latest activity first. `GET /api/conversations/{id}/messages`:
+  a chat's exchanges, oldest first.
+- `GET /api/model-settings`: providers (and whether they have an API key), their models, max
+  tokens and system prompt. Interactive docs at `/docs`.
 
 ## Changing the API
 
@@ -81,12 +86,14 @@ Backend settings are environment variables (see `backend/app/config.py`):
 | Variable | Default | |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://app:app@localhost:5432/app` | |
-| `LLM_PROVIDER` | `claude` | `claude` or `gemini` |
-| `ANTHROPIC_API_KEY` | — | Required when the provider is `claude` |
-| `ANTHROPIC_MODEL` | `claude-opus-5-5` | |
+| `LLM_PROVIDER` | `claude` | Default provider: `claude` or `gemini` |
+| `ANTHROPIC_API_KEY` | — | Without it, Claude is shown but can't be picked |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5` | Claude's default model |
+| `ANTHROPIC_MODELS` | `["claude-opus-5-5","claude-sonnet-5-5"]` | JSON list offered in the model picker |
 | `ANTHROPIC_EFFORT` | `low` | `low` to `max`; low keeps simple answers fast and cheap |
-| `GEMINI_API_KEY` | — | Required when the provider is `gemini` |
-| `GEMINI_MODEL` | `gemini-flash-lite-latest` | |
+| `GEMINI_API_KEY` | — | Without it, Gemini is shown but can't be picked |
+| `GEMINI_MODEL` | `gemini-flash-lite-latest` | Gemini's default model |
+| `GEMINI_MODELS` | `["gemini-flash-lite-latest","gemini-flash-latest"]` | JSON list offered in the model picker |
 | `MAX_TOKENS` | `16000` | Maximum answer length, both providers |
 | `TIMEOUT_SECONDS` | `60` | |
 | `SYSTEM_PROMPT` | Brief, simple answers | |

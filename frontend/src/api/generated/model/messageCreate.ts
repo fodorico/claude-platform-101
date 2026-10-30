@@ -4,6 +4,7 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { MessageCreateProvider } from './messageCreateProvider'
 
 export interface MessageCreate {
   /**
@@ -11,4 +12,7 @@ export interface MessageCreate {
    * @maxLength 10000
    */
   content: string
+  conversation_id?: number | null
+  model?: string | null
+  provider?: MessageCreateProvider
 }

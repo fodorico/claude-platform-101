@@ -10,12 +10,12 @@ from google import genai
 from google.genai import types as genai_types
 from pydantic import SecretStr
 
-from app.api import health, messages, model_settings
+from app.api import conversations, health, messages, model_settings
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.services.claude import ClaudeService
 from app.services.gemini import GeminiService
-from app.services.llm import LLMService
+from app.services.llm import LLMRegistry, LLMService
 
 
 def _operation_id(route: APIRoute) -> str:
@@ -26,31 +26,33 @@ def _secret(value: SecretStr | None) -> str | None:
     return value.get_secret_value() if value else None
 
 
-def build_llm_service(settings: Settings, stack: AsyncExitStack) -> LLMService:
-    """Create the configured provider's client; `stack` closes it on shutdown."""
-    if settings.llm_provider == "gemini":
+def build_llm_registry(settings: Settings, stack: AsyncExitStack) -> LLMRegistry:
+    """Create a client for each provider with an API key; `stack` closes them on shutdown."""
+    services: dict[str, LLMService] = {}
+    if settings.gemini_api_key:
         gemini_client = genai.Client(
             api_key=_secret(settings.gemini_api_key),
             http_options=genai_types.HttpOptions(timeout=int(settings.timeout_seconds * 1000)),
         )
         stack.push_async_callback(gemini_client.aio.aclose)
-        return GeminiService(
-            gemini_client,
-            model=settings.gemini_model,
+        services["gemini"] = GeminiService(
+            gemini_client, max_tokens=settings.max_tokens, system_prompt=settings.system_prompt
+        )
+    if settings.anthropic_api_key:
+        claude_client = anthropic.AsyncAnthropic(
+            api_key=_secret(settings.anthropic_api_key), timeout=settings.timeout_seconds
+        )
+        stack.push_async_callback(claude_client.close)
+        services["claude"] = ClaudeService(
+            claude_client,
+            effort=settings.anthropic_effort,
             max_tokens=settings.max_tokens,
             system_prompt=settings.system_prompt,
         )
-
-    claude_client = anthropic.AsyncAnthropic(
-        api_key=_secret(settings.anthropic_api_key), timeout=settings.timeout_seconds
-    )
-    stack.push_async_callback(claude_client.close)
-    return ClaudeService(
-        claude_client,
-        model=settings.anthropic_model,
-        effort=settings.anthropic_effort,
-        max_tokens=settings.max_tokens,
-        system_prompt=settings.system_prompt,
+    return LLMRegistry(
+        services,
+        {provider: settings.models_for(provider) for provider in ("claude", "gemini")},
+        default_provider=settings.llm_provider,
     )
 
 
@@ -64,7 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(engine.dispose)
             app.state.settings = settings
             app.state.session_factory = create_session_factory(engine)
-            app.state.llm_service = build_llm_service(settings, stack)
+            app.state.llm_registry = build_llm_registry(settings, stack)
             yield
 
     app = FastAPI(
@@ -81,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type"],
     )
     app.include_router(health.router)
+    app.include_router(conversations.router)
     app.include_router(messages.router)
     app.include_router(model_settings.router)
     return app
