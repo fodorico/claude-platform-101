@@ -94,6 +94,46 @@ describe('ChatPage', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('')
   })
 
+  it('sends a suggestion from the empty state', async () => {
+    const user = userEvent.setup()
+    mockApi([], () => ({ ok: true }))
+    renderApp()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Explain what an API is in two sentences' }),
+    )
+
+    expect(
+      await screen.findByText('Reply to Explain what an API is in two sentences'),
+    ).toBeInTheDocument()
+  })
+
+  it('sends with Enter and keeps Shift+Enter for new lines', async () => {
+    const user = userEvent.setup()
+    mockApi([], () => ({ ok: true }))
+    renderApp()
+    const box = await screen.findByLabelText('Message')
+
+    await user.type(box, 'Line one{Shift>}{Enter}{/Shift}Line two')
+    expect(box).toHaveValue('Line one\nLine two')
+    await user.type(box, '{Enter}')
+
+    expect(await screen.findByText(/Reply to Line one/)).toBeInTheDocument()
+    expect(box).toHaveValue('')
+  })
+
+  it('shows the conversation oldest first', async () => {
+    mockApi([exchange(2, 'Second question'), exchange(1, 'First question')], () => ({ ok: true }))
+    renderApp()
+
+    await screen.findByText('First question')
+    const prompts = screen
+      .getAllByText(/^(First|Second) question$/)
+      .map((element) => element.textContent)
+
+    expect(prompts).toEqual(['First question', 'Second question'])
+  })
+
   it('does not send an empty message', async () => {
     const user = userEvent.setup()
     const fetchMock = mockApi([], () => ({ ok: true }))

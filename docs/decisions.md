@@ -26,3 +26,7 @@
   frontend reads the stream with `fetch` in `src/api/stream.ts`, whose event types mirror
   `StreamDelta` / `StreamError` by hand (the generated client can't consume SSE). The exchange is
   stored only when the answer completes. The non-streaming endpoint stays.
+- **2026-10-30 — Chat UI.** Conversation layout (oldest first, auto-scroll, composer fixed at the
+  bottom, Enter to send). Answers render as Markdown with react-markdown + remark-gfm (raw HTML is
+  not rendered) and Tailwind Typography. daisyUI themes `nord` (light) and `dim` (dark): system
+  preference by default, toggle saved in localStorage.
