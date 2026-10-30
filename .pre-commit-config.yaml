@@ -1,0 +1,46 @@
+# Install once with: cd backend && uv run pre-commit install
+# Local hooks reuse the exact tool versions pinned by each project.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^frontend/src/api/generated/
+      - id: end-of-file-fixer
+        exclude: ^frontend/src/api/generated/
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: sh -c 'cd backend && uv run ruff check --fix'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format
+        entry: sh -c 'cd backend && uv run ruff format'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: sh -c 'cd backend && uv run mypy'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: eslint
+        name: eslint
+        entry: sh -c 'cd frontend && npx eslint .'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js)$
+        pass_filenames: false
+      - id: prettier
+        name: prettier
+        entry: sh -c 'cd frontend && npx prettier --check .'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
