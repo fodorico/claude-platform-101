@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +13,11 @@ function exchange(id: number, prompt: string): ExchangeRead {
     prompt,
     reply: `Reply to ${prompt}`,
     model: 'claude-opus-5-5',
+    stop_reason: 'end_turn',
+    input_tokens: 12,
+    output_tokens: 34,
+    duration_ms: 1200,
+    first_token_ms: 400,
     created_at: '2026-10-29T12:00:00Z',
   }
 }
@@ -50,6 +55,16 @@ function mockApi(history: ExchangeRead[], outcome: (content: string) => StreamOu
         ]),
       )
     }
+    if (url === '/api/model-settings') {
+      return Promise.resolve(
+        jsonResponse({
+          provider: 'claude',
+          model: 'claude-opus-5-5',
+          max_tokens: 16000,
+          system_prompt: 'Answer briefly.',
+        }),
+      )
+    }
     expect(url).toContain('/api/messages')
     return Promise.resolve(jsonResponse(history))
   })
@@ -70,6 +85,7 @@ function renderApp() {
 describe('ChatPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    localStorage.clear()
   })
 
   it('shows the stored history', async () => {
@@ -175,5 +191,56 @@ describe('ChatPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The AI service is not available right now',
     )
+  })
+
+  it('opens the side panels from the header and remembers them', async () => {
+    mockApi([exchange(1, 'What is MCP?')], () => ({ ok: true }))
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByText('Reply to What is MCP?')
+
+    expect(screen.queryByRole('complementary', { name: 'History' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'History' }))
+    await user.click(screen.getByRole('button', { name: 'Request details' }))
+
+    expect(screen.getByRole('complementary', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Request details' })).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('panels') ?? '{}')).toEqual({
+      history: true,
+      details: true,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Close history' }))
+    expect(screen.queryByRole('complementary', { name: 'History' })).not.toBeInTheDocument()
+  })
+
+  it('shows the metrics of the answer picked in the history', async () => {
+    const older = { ...exchange(1, 'First question'), duration_ms: 850, output_tokens: 7 }
+    mockApi([exchange(2, 'Second question'), older], () => ({ ok: true }))
+    localStorage.setItem('panels', JSON.stringify({ history: true, details: true }))
+    const user = userEvent.setup()
+    renderApp()
+
+    const details = await screen.findByRole('complementary', { name: 'Request details' })
+    expect(await within(details).findByText('1.2 s')).toBeInTheDocument()
+
+    const historyPanel = screen.getByRole('complementary', { name: 'History' })
+    await user.click(within(historyPanel).getByRole('button', { name: 'First question' }))
+
+    expect(within(details).getByText('850 ms')).toBeInTheDocument()
+    expect(within(details).getByText('7')).toBeInTheDocument()
+    expect(await within(details).findByText('Answer briefly.')).toBeInTheDocument()
+  })
+
+  it('opens the details of an answer from its info button', async () => {
+    mockApi([exchange(1, 'What is MCP?')], () => ({ ok: true }))
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(await screen.findByRole('button', { name: 'Show request details' }))
+
+    const details = screen.getByRole('complementary', { name: 'Request details' })
+    expect(within(details).getByText('400 ms')).toBeInTheDocument()
+    expect(within(details).getByText('end_turn')).toBeInTheDocument()
   })
 })

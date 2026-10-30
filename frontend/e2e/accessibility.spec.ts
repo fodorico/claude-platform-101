@@ -46,6 +46,20 @@ for (const theme of ['nord', 'dim'] as const) {
       await expectNoViolations(page)
     })
 
+    test('open side panels have no accessibility violations', async ({ page }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem('panels', JSON.stringify({ history: true, details: true }))
+      })
+      await mockApi(page, {
+        history: [exchange(1, 'What is an API?', 'A contract between **programs**.')],
+        answer: () => ({ reply: 'ok' }),
+      })
+      await page.goto('/')
+      await expect(page.getByText('Answer briefly.')).toBeVisible()
+
+      await expectNoViolations(page)
+    })
+
     test('error state has no accessibility violations', async ({ page }) => {
       await mockApi(page, { answer: () => ({ error: 'Rate limit reached', status: 429 }) })
       await page.goto('/')

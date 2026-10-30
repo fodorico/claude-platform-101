@@ -2,7 +2,18 @@ import type { Page } from '@playwright/test'
 import type { ExchangeRead } from '../src/api/generated/model'
 
 export function exchange(id: number, prompt: string, reply: string): ExchangeRead {
-  return { id, prompt, reply, model: 'claude-opus-5-5', created_at: '2026-10-30T12:00:00Z' }
+  return {
+    id,
+    prompt,
+    reply,
+    model: 'claude-opus-5-5',
+    stop_reason: 'end_turn',
+    input_tokens: 12,
+    output_tokens: 34,
+    duration_ms: 1200,
+    first_token_ms: 400,
+    created_at: new Date().toISOString(),
+  }
 }
 
 type Answer = { reply: string } | { error: string; status: number }
@@ -22,6 +33,16 @@ export async function mockApi(
   const stored = [...history]
 
   await page.route('**/api/messages?*', (route) => route.fulfill({ json: stored }))
+  await page.route('**/api/model-settings', (route) =>
+    route.fulfill({
+      json: {
+        provider: 'claude',
+        model: 'claude-opus-5-5',
+        max_tokens: 16000,
+        system_prompt: 'Answer briefly.',
+      },
+    }),
+  )
   await page.route('**/api/messages/stream', async (route) => {
     const { content } = route.request().postDataJSON() as { content: string }
     const result = answer(content)
