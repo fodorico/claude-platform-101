@@ -21,3 +21,18 @@ class ExchangeRead(BaseModel):
 
 class HealthRead(BaseModel):
     status: str
+
+
+# Server-sent events of POST /api/messages/stream. The frontend mirrors these shapes in
+# frontend/src/api/stream.ts.
+class StreamDelta(BaseModel):
+    """`event: delta` — a piece of the answer, in order."""
+
+    text: str
+
+
+class StreamError(BaseModel):
+    """`event: error` — the answer failed; `status` is the HTTP status the error maps to."""
+
+    detail: str
+    status: int

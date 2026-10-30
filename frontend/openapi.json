@@ -235,6 +235,44 @@
           "messages"
         ]
       }
+    },
+    "/api/messages/stream": {
+      "post": {
+        "description": "Send a message and stream the answer as it is generated; the exchange is stored at the\nend. Nothing is stored if the answer fails, even after part of it was streamed.",
+        "operationId": "stream_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Server-sent events: `delta` (StreamDelta) for each piece of the answer, then `done` (ExchangeRead) once it is stored, or `error` (StreamError)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Message",
+        "tags": [
+          "messages"
+        ]
+      }
     }
   }
 }

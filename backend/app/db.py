@@ -22,7 +22,12 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    """For work that outlives the request handler, e.g. inside a streaming response."""
     session_factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-    async with session_factory() as session:
+    return session_factory
+
+
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
+    async with get_session_factory(request)() as session:
         yield session

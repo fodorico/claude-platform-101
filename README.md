@@ -58,6 +58,13 @@ Git hooks: `cd backend && uv run pre-commit install`.
 | Types | `uv run mypy` | `npm run typecheck` |
 | Tests | `uv run pytest` (needs Docker) | `npm test` |
 
+## API
+
+- `POST /api/messages`: ask and get the stored exchange in one response.
+- `POST /api/messages/stream`: same, streamed as server-sent events (`delta`, then `done` or
+  `error`). The UI uses this one.
+- `GET /api/messages`: recent exchanges, newest first. Interactive docs at `/docs`.
+
 ## Changing the API
 
 1. Change the backend (and add an Alembic migration if the database changes:

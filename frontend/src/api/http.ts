@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 /** FastAPI puts a string (or a list of validation errors) in `detail`. */
-async function readErrorMessage(response: Response): Promise<string> {
+export async function readErrorMessage(response: Response): Promise<string> {
   try {
     const body: unknown = await response.json()
     if (typeof body === 'object' && body !== null && 'detail' in body) {

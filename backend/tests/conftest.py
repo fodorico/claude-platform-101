@@ -12,7 +12,7 @@ from testcontainers.community.postgres import PostgresContainer
 from app.config import Settings
 from app.db import create_engine
 from app.main import create_app
-from app.services.llm import LLMError, LLMReply, get_llm_service
+from app.services.llm import LLMError, LLMReply, StreamItem, get_llm_service
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,10 +24,7 @@ class FakeClaudeService:
         self.prompts: list[str] = []
         self.error: LLMError | None = None
 
-    async def ask(self, prompt: str) -> LLMReply:
-        self.prompts.append(prompt)
-        if self.error:
-            raise self.error
+    def _reply(self, prompt: str) -> LLMReply:
         return LLMReply(
             text=f"Reply to: {prompt}",
             model="claude-test",
@@ -35,6 +32,21 @@ class FakeClaudeService:
             input_tokens=10,
             output_tokens=5,
         )
+
+    async def ask(self, prompt: str) -> LLMReply:
+        self.prompts.append(prompt)
+        if self.error:
+            raise self.error
+        return self._reply(prompt)
+
+    async def stream(self, prompt: str) -> AsyncIterator[StreamItem]:
+        self.prompts.append(prompt)
+        for chunk in ["Reply ", "to: ", prompt]:
+            yield chunk
+            # A configured error fails the stream after the first chunk, like a mid-answer failure.
+            if self.error:
+                raise self.error
+        yield self._reply(prompt)
 
 
 @pytest.fixture(scope="session")
