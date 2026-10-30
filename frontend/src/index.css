@@ -1,2 +1,14 @@
 @import 'tailwindcss';
-@plugin 'daisyui';
+@plugin '@tailwindcss/typography';
+@plugin 'daisyui' {
+  themes:
+    nord --default,
+    dim --prefersdark;
+}
+
+/* The theme toggle sets data-theme on <html>; without it the system preference applies. */
+html,
+body,
+#root {
+  height: 100%;
+}

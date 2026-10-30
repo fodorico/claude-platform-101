@@ -67,7 +67,10 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     await engine.dispose()
 
 
-@pytest.fixture(autouse=True)
+# Only tests that use the database (through `client`) pay for PostgreSQL: the container starts
+# once per run, on first use, and tables are emptied before each of those tests. Unit tests of
+# the services don't touch it, so running them alone takes well under a second.
+@pytest.fixture
 async def clean_tables(engine: AsyncEngine) -> None:
     async with engine.begin() as connection:
         await connection.execute(text("TRUNCATE exchanges RESTART IDENTITY"))
@@ -79,7 +82,9 @@ def fake_claude() -> FakeClaudeService:
 
 
 @pytest.fixture
-async def client(database_url: str, fake_claude: FakeClaudeService) -> AsyncIterator[AsyncClient]:
+async def client(
+    database_url: str, fake_claude: FakeClaudeService, clean_tables: None
+) -> AsyncIterator[AsyncClient]:
     app = create_app(Settings(database_url=database_url))
     app.dependency_overrides[get_llm_service] = lambda: fake_claude
     async with (
