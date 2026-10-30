@@ -51,6 +51,9 @@ const modelSettings = {
   ],
   max_tokens: 16000,
   system_prompt: 'Answer briefly.',
+  prices: [
+    { model: 'gemini-flash-lite', input: 0.3, output: 2.5, cache_read: 0.03, cache_write: 0 },
+  ],
 }
 
 interface Chat {
@@ -117,10 +120,66 @@ export async function mockApi(
     const chat = chats.find((item) => item.conversation.id === id)
     if (!chat) return route.fulfill({ status: 404, json: { detail: 'Conversation not found' } })
     if (route.request().method() === 'GET') return route.fulfill({ json: chat.conversation })
-    const body = route.request().postDataJSON() as { title?: string; archived?: boolean }
+    const body = route.request().postDataJSON() as {
+      title?: string
+      archived?: boolean
+      pinned?: boolean
+      settings?: Partial<ConversationRead>
+    }
     if (body.title) chat.conversation.title = body.title
     if (body.archived !== undefined) chat.conversation.archived_at = body.archived ? now : null
+    if (body.pinned !== undefined) chat.conversation.pinned_at = body.pinned ? now : null
+    if (body.settings) Object.assign(chat.conversation, body.settings)
     return route.fulfill({ json: chat.conversation })
+  })
+  await page.route(/\/api\/exchanges\/\d+$/, (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split('/').pop())
+    const all = chats.flatMap((chat) => chat.messages)
+    const target = all.find((item) => item.id === id)
+    if (!target) return route.fulfill({ status: 404, json: { detail: 'Message not found' } })
+    const body = route.request().postDataJSON() as { rating?: number; active?: boolean }
+    if (body.rating !== undefined) target.rating = body.rating || null
+    if (body.active) {
+      for (const item of all) {
+        if (item.version_group === target.version_group) item.is_active = item.id === id
+      }
+    }
+    return route.fulfill({ json: target })
+  })
+  await page.route('**/api/exchanges/*/api-call', (route) =>
+    route.fulfill({
+      json: {
+        provider: 'gemini',
+        request: {
+          model: 'gemini-flash-lite-latest',
+          system_instruction: 'Answer briefly.',
+          contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+        },
+        usage: { prompt_token_count: 12, candidates_token_count: 34 },
+      },
+    }),
+  )
+  await page.route('**/api/messages/count-tokens', (route) => {
+    const body = route.request().postDataJSON() as MessageCreate
+    return route.fulfill({ json: { input_tokens: body.content.split(' ').length * 3 } })
+  })
+  const prompts: { id: number; title: string; content: string; created_at: string }[] = []
+  await page.route(/\/api\/prompts(\/\d+)?$/, (route) => {
+    const request = route.request()
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as { title: string; content: string }
+      prompts.push({ id: nextId++, ...body, created_at: now })
+      return route.fulfill({ status: 201, json: prompts.at(-1) })
+    }
+    if (request.method() === 'DELETE') {
+      const id = Number(new URL(request.url()).pathname.split('/').pop())
+      prompts.splice(
+        prompts.findIndex((item) => item.id === id),
+        1,
+      )
+      return route.fulfill({ status: 204 })
+    }
+    return route.fulfill({ json: prompts })
   })
   await page.route('**/api/conversations/*/messages', (route) => {
     const id = Number(new URL(route.request().url()).pathname.split('/')[3])
@@ -160,10 +219,21 @@ export async function mockApi(
       chats.unshift(chat)
     }
     const created = exchange(nextId++, body.content, result.reply, chat.conversation.id)
-    chat.messages = chat.messages.filter((item) => item.id !== body.replaces_id)
+    // A regenerated or edited message becomes a new active version of the replaced one.
+    const replaced = chat.messages.find((item) => item.id === body.replaces_id)
+    if (replaced) {
+      created.version_group = replaced.version_group
+      for (const item of chat.messages) {
+        if (item.version_group === replaced.version_group) item.is_active = false
+      }
+    }
+    const showThinking = body.settings?.show_thinking ?? chat.conversation.show_thinking
+    if (body.settings) Object.assign(chat.conversation, body.settings)
+    if (showThinking) created.thinking = 'First, recall what an API is.'
     chat.messages.push(created)
     const middle = Math.ceil(result.reply.length / 2)
     const events: [string, unknown][] = [
+      ...(showThinking ? [['thinking', { text: created.thinking }] as [string, unknown]] : []),
       ['delta', { text: result.reply.slice(0, middle) }],
       ['delta', { text: result.reply.slice(middle) }],
       ['done', created],

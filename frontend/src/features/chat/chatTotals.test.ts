@@ -32,7 +32,15 @@ describe('chatTotals', () => {
       exchange('b', 500),
     ])
 
-    expect(total).toEqual({ messages: 3, inputTokens: 30, outputTokens: 60, durationMs: 1500 })
+    expect(total).toEqual({
+      messages: 3,
+      inputTokens: 30,
+      outputTokens: 60,
+      cacheReadTokens: 0,
+      durationMs: 1500,
+      // No prices given: no estimate.
+      cost: null,
+    })
     expect(byModel.map(([model, usage]) => [model, usage.messages])).toEqual([
       ['b', 2],
       ['a', 1],

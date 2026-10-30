@@ -1,8 +1,12 @@
+import { Braces } from 'lucide-react'
+import { useState } from 'react'
 import { useGetModelSettings } from '../../api/generated/api'
 import type { ExchangeRead } from '../../api/generated/model'
+import { exchangeCost, formatCost } from '../models/cost'
 import { PROVIDER_LABELS } from '../models/modelChoice'
 import { modelLabel } from '../models/modelLabel'
 import { SidePanel } from '../panels/SidePanel'
+import { ApiCallDialog } from './ApiCallDialog'
 import { chatTotals } from './chatTotals'
 import { formatDuration } from './format'
 
@@ -39,7 +43,9 @@ const count = (value: number) => value.toLocaleString('en')
 /** What the API did for one answer and for the whole chat, plus how it calls the model. */
 export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: DetailsPanelProps) {
   const settings = useGetModelSettings()
-  const totals = chatTotals(exchanges)
+  const prices = settings.data?.prices ?? []
+  const totals = chatTotals(exchanges, prices)
+  const [inspecting, setInspecting] = useState<number | null>(null)
 
   return (
     <SidePanel side="right" title="Request details" onClose={onClose}>
@@ -59,6 +65,11 @@ export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: Deta
                 <Metric label="Output tokens" value={String(exchange.output_tokens)} />
               </dl>
               <dl className="flex flex-col gap-2 text-sm">
+                <Row label="Estimated cost" value={formatCost(exchangeCost(exchange, prices))} />
+                <Row label="Cache read" value={`${count(exchange.cache_read_tokens)} tokens`} />
+                {exchange.provider === 'claude' && (
+                  <Row label="Cache write" value={`${count(exchange.cache_write_tokens)} tokens`} />
+                )}
                 <Row
                   label="Provider"
                   value={PROVIDER_LABELS[exchange.provider] ?? exchange.provider}
@@ -66,6 +77,16 @@ export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: Deta
                 <Row label="Model" value={exchange.model} mono />
                 <Row label="Stop reason" value={exchange.stop_reason} mono />
               </dl>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm gap-2 self-start"
+                onClick={() => {
+                  setInspecting(exchange.id)
+                }}
+              >
+                <Braces aria-hidden className="size-4" />
+                View API call
+              </button>
             </>
           )}
         </section>
@@ -76,11 +97,18 @@ export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: Deta
               This chat
             </h3>
             <dl className="grid grid-cols-2 gap-2">
-              <Metric label="Messages" value={count(totals.total.messages)} />
+              <Metric label="Answers" value={count(totals.total.messages)} />
+              <Metric label="Estimated cost" value={formatCost(totals.total.cost)} />
               <Metric label="Total time" value={formatDuration(totals.total.durationMs)} />
               <Metric label="Input tokens" value={count(totals.total.inputTokens)} />
               <Metric label="Output tokens" value={count(totals.total.outputTokens)} />
+              <Metric label="Cache read" value={count(totals.total.cacheReadTokens)} />
             </dl>
+            {totals.total.cost !== null && (
+              <p className="text-xs text-base-content/80">
+                Estimated at paid-tier list prices; free tiers cost nothing.
+              </p>
+            )}
             {totals.byModel.length > 1 && (
               <table className="table table-xs">
                 <caption className="sr-only">Usage by model</caption>
@@ -88,7 +116,7 @@ export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: Deta
                   <tr>
                     <th scope="col">Model</th>
                     <th scope="col" className="text-right">
-                      Messages
+                      Answers
                     </th>
                     <th scope="col" className="text-right">
                       Tokens in / out
@@ -134,6 +162,14 @@ export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: Deta
           )}
         </section>
       </div>
+      {inspecting !== null && (
+        <ApiCallDialog
+          exchangeId={inspecting}
+          onClose={() => {
+            setInspecting(null)
+          }}
+        />
+      )}
     </SidePanel>
   )
 }

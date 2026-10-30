@@ -42,10 +42,12 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced
 }
 
+/** Pinned chats first, then the others by day of their latest activity. */
 function groupByDay(conversations: ConversationRead[]) {
   const groups = new Map<string, ConversationRead[]>()
   for (const conversation of conversations) {
-    const label = dayLabel(new Date(conversation.updated_at))
+    const label =
+      conversation.pinned_at === null ? dayLabel(new Date(conversation.updated_at)) : 'Pinned'
     groups.set(label, [...(groups.get(label) ?? []), conversation])
   }
   return [...groups]
@@ -233,6 +235,13 @@ export function HistoryPanel({ currentId, onOpen, onDeleted, onClose }: HistoryP
                   }}
                   onRename={(title) => {
                     update.mutate({ conversationId: conversation.id, data: { title } })
+                  }}
+                  onPin={() => {
+                    setMenuId(null)
+                    update.mutate({
+                      conversationId: conversation.id,
+                      data: { pinned: conversation.pinned_at === null },
+                    })
                   }}
                   onArchive={() => {
                     setMenuId(null)
