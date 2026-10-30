@@ -11,6 +11,10 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      # typescript-eslint 8 supports TypeScript < 6.1 only; remove once it supports 7.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
     groups:
       frontend:
         patterns: ["*"]
