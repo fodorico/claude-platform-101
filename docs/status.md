@@ -6,6 +6,8 @@
 
 - Streaming answers (server-sent events) for Claude and Gemini (2026-10-30).
 - Chat UI redesign: conversation layout, Markdown answers, light/dark theme (2026-10-30).
+- End-to-end tests (Playwright, desktop + mobile) with axe accessibility scans in CI; fixed
+  low-contrast text found by axe (2026-10-30).
 
 ## Next
 
