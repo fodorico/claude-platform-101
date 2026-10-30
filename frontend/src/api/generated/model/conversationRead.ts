@@ -9,6 +9,11 @@ export interface ConversationRead {
   archived_at: string | null
   created_at: string
   id: number
+  max_tokens: number | null
+  pinned_at: string | null
+  show_thinking: boolean
+  system_prompt: string | null
+  temperature: number | null
   title: string
   updated_at: string
 }

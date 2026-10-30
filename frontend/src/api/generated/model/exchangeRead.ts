@@ -4,18 +4,26 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { AttachmentRead } from './attachmentRead'
 
 export interface ExchangeRead {
+  attachments: AttachmentRead[]
+  cache_read_tokens: number
+  cache_write_tokens: number
   conversation_id: number
   created_at: string
   duration_ms: number | null
   first_token_ms: number | null
   id: number
   input_tokens: number
+  is_active: boolean
   model: string
   output_tokens: number
   prompt: string
   provider: string
+  rating: number | null
   reply: string
   stop_reason: string
+  thinking: string | null
+  version_group: number
 }

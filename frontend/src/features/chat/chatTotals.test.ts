@@ -15,6 +15,13 @@ const exchange = (model: string, durationMs: number | null): ExchangeRead => ({
   duration_ms: durationMs,
   first_token_ms: null,
   created_at: '2026-10-29T12:00:00Z',
+  thinking: null,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  rating: null,
+  version_group: 1,
+  is_active: true,
+  attachments: [],
 })
 
 describe('chatTotals', () => {

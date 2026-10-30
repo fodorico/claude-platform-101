@@ -1,6 +1,100 @@
 {
   "components": {
     "schemas": {
+      "ApiCallRead": {
+        "description": "What the API sent to the provider for one answer, and the usage it returned.",
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "provider",
+          "request",
+          "usage"
+        ],
+        "title": "ApiCallRead",
+        "type": "object"
+      },
+      "AttachmentRead": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "media_type"
+        ],
+        "title": "AttachmentRead",
+        "type": "object"
+      },
+      "ChatSettings": {
+        "description": "How the model answers in a chat; None means the API's default.",
+        "properties": {
+          "max_tokens": {
+            "anyOf": [
+              {
+                "maximum": 128000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "show_thinking": {
+            "default": false,
+            "title": "Show Thinking",
+            "type": "boolean"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          }
+        },
+        "title": "ChatSettings",
+        "type": "object"
+      },
       "ConversationBulkAction": {
         "properties": {
           "action": {
@@ -43,6 +137,20 @@
         "title": "ConversationBulkResult",
         "type": "object"
       },
+      "ConversationFork": {
+        "description": "Start a new chat with this one's messages up to and including `exchange_id`.",
+        "properties": {
+          "exchange_id": {
+            "title": "Exchange Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exchange_id"
+        ],
+        "title": "ConversationFork",
+        "type": "object"
+      },
       "ConversationRead": {
         "properties": {
           "archived_at": {
@@ -66,6 +174,55 @@
             "title": "Id",
             "type": "integer"
           },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
+          },
+          "show_thinking": {
+            "title": "Show Thinking",
+            "type": "boolean"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -80,14 +237,19 @@
           "id",
           "title",
           "archived_at",
+          "pinned_at",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "system_prompt",
+          "temperature",
+          "max_tokens",
+          "show_thinking"
         ],
         "title": "ConversationRead",
         "type": "object"
       },
       "ConversationUpdate": {
-        "description": "Rename and/or archive a conversation; fields left out stay as they are.",
+        "description": "Rename, archive, pin or change the settings of a conversation; fields left out stay as\nthey are.",
         "properties": {
           "archived": {
             "anyOf": [
@@ -99,6 +261,27 @@
               }
             ],
             "title": "Archived"
+          },
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "anyOf": [
@@ -119,6 +302,21 @@
       },
       "ExchangeRead": {
         "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentRead"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
           "conversation_id": {
             "title": "Conversation Id",
             "type": "integer"
@@ -158,6 +356,10 @@
             "title": "Input Tokens",
             "type": "integer"
           },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -174,6 +376,17 @@
             "title": "Provider",
             "type": "string"
           },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
           "reply": {
             "title": "Reply",
             "type": "string"
@@ -181,6 +394,21 @@
           "stop_reason": {
             "title": "Stop Reason",
             "type": "string"
+          },
+          "thinking": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking"
+          },
+          "version_group": {
+            "title": "Version Group",
+            "type": "integer"
           }
         },
         "required": [
@@ -195,9 +423,51 @@
           "output_tokens",
           "duration_ms",
           "first_token_ms",
-          "created_at"
+          "created_at",
+          "thinking",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "rating",
+          "version_group",
+          "is_active",
+          "attachments"
         ],
         "title": "ExchangeRead",
+        "type": "object"
+      },
+      "ExchangeUpdate": {
+        "description": "Rate an answer and/or make this version of the last message the active one.",
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "enum": [
+                  -1,
+                  0,
+                  1
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          }
+        },
+        "title": "ExchangeUpdate",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -226,6 +496,30 @@
         "title": "HealthRead",
         "type": "object"
       },
+      "ImageCreate": {
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/gif",
+              "image/webp"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_type",
+          "data"
+        ],
+        "title": "ImageCreate",
+        "type": "object"
+      },
       "MessageCreate": {
         "properties": {
           "content": {
@@ -244,6 +538,14 @@
               }
             ],
             "title": "Conversation Id"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageCreate"
+            },
+            "maxItems": 4,
+            "title": "Images",
+            "type": "array"
           },
           "model": {
             "anyOf": [
@@ -282,12 +584,56 @@
               }
             ],
             "title": "Replaces Id"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "content"
         ],
         "title": "MessageCreate",
+        "type": "object"
+      },
+      "ModelPrice": {
+        "description": "USD per million tokens, for cost estimates. `model` matches by prefix the model id the\nprovider reports (the longest match wins).",
+        "properties": {
+          "cache_read": {
+            "title": "Cache Read",
+            "type": "number"
+          },
+          "cache_write": {
+            "title": "Cache Write",
+            "type": "number"
+          },
+          "input": {
+            "title": "Input",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "input",
+          "output",
+          "cache_read",
+          "cache_write"
+        ],
+        "title": "ModelPrice",
         "type": "object"
       },
       "ModelSettingsRead": {
@@ -300,6 +646,13 @@
           "max_tokens": {
             "title": "Max Tokens",
             "type": "integer"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/ModelPrice"
+            },
+            "title": "Prices",
+            "type": "array"
           },
           "providers": {
             "items": {
@@ -317,9 +670,61 @@
           "default_provider",
           "providers",
           "max_tokens",
-          "system_prompt"
+          "system_prompt",
+          "prices"
         ],
         "title": "ModelSettingsRead",
+        "type": "object"
+      },
+      "PromptCreate": {
+        "properties": {
+          "content": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "content"
+        ],
+        "title": "PromptCreate",
+        "type": "object"
+      },
+      "PromptRead": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "content",
+          "created_at"
+        ],
+        "title": "PromptRead",
         "type": "object"
       },
       "ProviderRead": {
@@ -346,6 +751,20 @@
           "models"
         ],
         "title": "ProviderRead",
+        "type": "object"
+      },
+      "TokenCount": {
+        "description": "Input tokens a message would use, with its conversation's context and settings.",
+        "properties": {
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens"
+        ],
+        "title": "TokenCount",
         "type": "object"
       },
       "ValidationError": {
@@ -396,9 +815,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/attachments/{attachment_id}": {
+      "get": {
+        "description": "Return an image sent with a message.",
+        "operationId": "get_attachment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/*": {}
+            },
+            "description": "The image"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Attachment",
+        "tags": [
+          "exchanges"
+        ]
+      }
+    },
     "/api/conversations": {
       "get": {
-        "description": "Return the active (or, with `archived=true`, the archived) conversations, most recent\nactivity first. `q` keeps those whose title or messages contain it (any case).",
+        "description": "Return the active (or, with `archived=true`, the archived) conversations: pinned ones\nfirst, then most recent activity first. `q` keeps those whose title or messages contain it\n(any case).",
         "operationId": "list_conversations",
         "parameters": [
           {
@@ -593,7 +1051,7 @@
         ]
       },
       "patch": {
-        "description": "Rename a conversation, archive it or bring it back.",
+        "description": "Rename a conversation, archive or pin it (or undo that), or change its settings.",
         "operationId": "update_conversation",
         "parameters": [
           {
@@ -644,9 +1102,62 @@
         ]
       }
     },
+    "/api/conversations/{conversation_id}/fork": {
+      "post": {
+        "description": "Start a new chat with this one's settings and its messages up to and including\n`exchange_id` (the active versions only), to take the conversation another way.",
+        "operationId": "fork_conversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationFork"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fork Conversation",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/api/conversations/{conversation_id}/messages": {
       "get": {
-        "description": "Return a conversation's exchanges, oldest first.",
+        "description": "Return a conversation's exchanges, oldest first, including every version of a message\n(`version_group`); the context sent to the model is made of the active ones.",
         "operationId": "list_conversation_messages",
         "parameters": [
           {
@@ -688,6 +1199,102 @@
         "summary": "List Conversation Messages",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/api/exchanges/{exchange_id}": {
+      "patch": {
+        "description": "Rate an answer, or make this version of the conversation's last message the active one\n(earlier messages keep their version, so later context stays consistent).",
+        "operationId": "update_exchange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exchange_id",
+            "required": true,
+            "schema": {
+              "title": "Exchange Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Exchange",
+        "tags": [
+          "exchanges"
+        ]
+      }
+    },
+    "/api/exchanges/{exchange_id}/api-call": {
+      "get": {
+        "description": "What was sent to the provider for this answer and the usage it returned. The messages\nare rebuilt from the stored exchanges (earlier messages deleted since are left out).",
+        "operationId": "get_api_call",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exchange_id",
+            "required": true,
+            "schema": {
+              "title": "Exchange Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiCallRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Api Call",
+        "tags": [
+          "exchanges"
         ]
       }
     },
@@ -755,6 +1362,48 @@
         ]
       }
     },
+    "/api/messages/count-tokens": {
+      "post": {
+        "description": "Count the input tokens the message would use with its conversation's context, without\nsending it. Gemini counts the messages only, not the system prompt.",
+        "operationId": "count_message_tokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenCount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Count Message Tokens",
+        "tags": [
+          "messages"
+        ]
+      }
+    },
     "/api/messages/stream": {
       "post": {
         "description": "Send a message and stream the answer as it is generated; the exchange is stored at the\nend. Nothing is stored if the answer fails, even after part of it was streamed.",
@@ -774,7 +1423,7 @@
             "content": {
               "text/event-stream": {}
             },
-            "description": "Server-sent events: `delta` (StreamDelta) for each piece of the answer, then `done` (ExchangeRead) once it is stored, then \u2014 for a new conversation \u2014 `title` (StreamTitle); or `error` (StreamError)."
+            "description": "Server-sent events: `thinking` (StreamThinking) for each piece of the model's reasoning when the chat shows it, `delta` (StreamDelta) for each piece of the answer, then `done` (ExchangeRead) once it is stored, then \u2014 for a new conversation \u2014 `title` (StreamTitle); or `error` (StreamError)."
           },
           "422": {
             "content": {
@@ -812,6 +1461,159 @@
         "summary": "Get Model Settings",
         "tags": [
           "model settings"
+        ]
+      }
+    },
+    "/api/prompts": {
+      "get": {
+        "description": "Return the saved prompts, alphabetically.",
+        "operationId": "list_prompts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PromptRead"
+                  },
+                  "title": "Response List Prompts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Prompts",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "post": {
+        "description": "Save a prompt to reuse later.",
+        "operationId": "create_prompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Prompt",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/prompts/{prompt_id}": {
+      "delete": {
+        "description": "Delete a saved prompt.",
+        "operationId": "delete_prompt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": {
+              "title": "Prompt Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Prompt",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "put": {
+        "description": "Change a saved prompt's title and text.",
+        "operationId": "update_prompt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": {
+              "title": "Prompt Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Prompt",
+        "tags": [
+          "prompts"
         ]
       }
     }

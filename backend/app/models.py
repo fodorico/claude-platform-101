@@ -1,7 +1,20 @@
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Identity, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Identity,
+    LargeBinary,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
@@ -21,6 +34,13 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+    # Pinned chats are listed first.
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Generation settings for every message of the chat; None means the API's default.
+    system_prompt: Mapped[str | None] = mapped_column(Text)
+    temperature: Mapped[float | None] = mapped_column(Float)
+    max_tokens: Mapped[int | None]
+    show_thinking: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
 
 class Exchange(Base):
@@ -45,3 +65,50 @@ class Exchange(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+    # The model's reasoning (a summary), when the chat asked to show it.
+    thinking: Mapped[str | None] = mapped_column(Text)
+    cache_read_tokens: Mapped[int] = mapped_column(server_default="0")
+    cache_write_tokens: Mapped[int] = mapped_column(server_default="0")
+    # The user's feedback: 1 (good), -1 (bad) or None.
+    rating: Mapped[int | None] = mapped_column(SmallInteger)
+    # Regenerating or editing the last message adds a version of it instead of replacing it:
+    # versions share the first one's id here (None on the first), and one of them is active.
+    # The context sent to the model is made of the active exchanges.
+    version_of: Mapped[int | None] = mapped_column(
+        ForeignKey("exchanges.id", ondelete="CASCADE"), index=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    # What was sent to the provider (without the messages) and the usage it returned.
+    api_call: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+    attachments: Mapped[list[Attachment]] = relationship(
+        lazy="selectin", order_by="Attachment.id", cascade="all, delete-orphan"
+    )
+
+    @property
+    def version_group(self) -> int:
+        return self.version_of or self.id
+
+
+class Attachment(Base):
+    """An image sent with a message."""
+
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    exchange_id: Mapped[int] = mapped_column(
+        ForeignKey("exchanges.id", ondelete="CASCADE"), index=True
+    )
+    media_type: Mapped[str] = mapped_column(String(50))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class Prompt(Base):
+    """A saved prompt, inserted into the message box from the prompt library."""
+
+    __tablename__ = "prompts"
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    title: Mapped[str] = mapped_column(String(100))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

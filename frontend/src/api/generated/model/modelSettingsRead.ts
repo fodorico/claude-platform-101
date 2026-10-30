@@ -4,6 +4,7 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ModelPrice } from './modelPrice'
 import type { ProviderRead } from './providerRead'
 
 /**
@@ -12,6 +13,7 @@ import type { ProviderRead } from './providerRead'
 export interface ModelSettingsRead {
   default_provider: string
   max_tokens: number
+  prices: ModelPrice[]
   providers: ProviderRead[]
   system_prompt: string
 }

@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types as genai_types
 from pydantic import SecretStr
 
-from app.api import conversations, health, messages, model_settings
+from app.api import conversations, exchanges, health, messages, model_settings, prompts
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.services.claude import ClaudeService
@@ -86,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(conversations.router)
     app.include_router(messages.router)
     app.include_router(model_settings.router)
+    app.include_router(exchanges.router)
+    app.include_router(prompts.router)
     return app
 
 

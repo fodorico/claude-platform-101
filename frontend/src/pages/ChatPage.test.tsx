@@ -21,6 +21,13 @@ function exchange(id: number, conversationId: number, prompt: string): ExchangeR
     duration_ms: 1200,
     first_token_ms: 400,
     created_at: '2026-10-29T12:00:00Z',
+    thinking: null,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    rating: null,
+    version_group: id,
+    is_active: true,
+    attachments: [],
   }
 }
 
@@ -29,6 +36,11 @@ function conversation(id: number, title: string): ConversationRead {
     id,
     title,
     archived_at: null,
+    pinned_at: null,
+    system_prompt: null,
+    temperature: null,
+    max_tokens: null,
+    show_thinking: false,
     created_at: '2026-10-29T12:00:00Z',
     updated_at: '2026-10-29T12:00:00Z',
   }

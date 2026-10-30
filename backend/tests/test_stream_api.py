@@ -96,3 +96,13 @@ async def test_stream_rejects_bad_requests_before_calling_the_model(
 
     assert response.status_code == expected_status
     assert fake_llm.requests == []
+
+
+async def test_stream_sends_reasoning_when_the_chat_shows_it(client: AsyncClient) -> None:
+    events = await read_events(client, content="Hola", settings={"show_thinking": True})
+
+    names = [name for name, _ in events]
+    assert names[:2] == ["thinking", "delta"]
+    assert events[0][1] == {"text": "Thinking about it"}
+    done = next(data for name, data in events if name == "done")
+    assert done["thinking"] == "Thinking about it"

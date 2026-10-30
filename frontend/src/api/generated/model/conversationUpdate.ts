@@ -4,11 +4,15 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ChatSettings } from './chatSettings'
 
 /**
- * Rename and/or archive a conversation; fields left out stay as they are.
+ * Rename, archive, pin or change the settings of a conversation; fields left out stay as
+ * they are.
  */
 export interface ConversationUpdate {
   archived?: boolean | null
+  pinned?: boolean | null
+  settings?: ChatSettings | null
   title?: string | null
 }
