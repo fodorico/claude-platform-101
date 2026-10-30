@@ -10,7 +10,8 @@ Effort = Literal["low", "medium", "high", "xhigh", "max"]
 class Settings(BaseSettings):
     """Application settings, read from environment variables or a local `.env` file."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Empty variables (as copied from .env.example) mean "use the default".
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     database_url: str = "postgresql+asyncpg://app:app@localhost:5432/app"
 
