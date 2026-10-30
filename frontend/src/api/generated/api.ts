@@ -21,10 +21,11 @@ import type {
 } from '@tanstack/react-query'
 
 import type {
+  ConversationRead,
   ExchangeRead,
   HTTPValidationError,
   HealthRead,
-  ListMessagesParams,
+  ListConversationsParams,
   MessageCreate,
   ModelSettingsRead,
 } from './model'
@@ -45,6 +46,280 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
     })
   }
   return result
+}
+
+export const getListConversationsUrl = (params?: ListConversationsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/conversations?${stringifiedParams}`
+    : `/api/conversations`
+}
+
+/**
+ * Return the conversations with the most recent activity first.
+ * @summary List Conversations
+ */
+export const listConversations = async (
+  params?: ListConversationsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationRead[]> => {
+  return apiFetch<ConversationRead[]>(getListConversationsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListConversationsQueryKey = (params?: ListConversationsParams) => {
+  return [`/api/conversations`, ...(params ? [params] : [])] as const
+}
+
+export const getListConversationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListConversationsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListConversationsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listConversations>>> = ({ signal }) =>
+    listConversations(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listConversations>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListConversationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listConversations>>
+>
+export type ListConversationsQueryError = HTTPValidationError
+
+export function useListConversations<
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = HTTPValidationError,
+>(
+  params: undefined | ListConversationsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConversations>>,
+          TError,
+          Awaited<ReturnType<typeof listConversations>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConversations<
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListConversationsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConversations>>,
+          TError,
+          Awaited<ReturnType<typeof listConversations>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConversations<
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListConversationsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Conversations
+ */
+
+export function useListConversations<
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListConversationsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListConversationsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListConversationMessagesUrl = (conversationId: number) => {
+  return `/api/conversations/${conversationId}/messages`
+}
+
+/**
+ * Return a conversation's exchanges, oldest first.
+ * @summary List Conversation Messages
+ */
+export const listConversationMessages = async (
+  conversationId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ExchangeRead[]> => {
+  return apiFetch<ExchangeRead[]>(getListConversationMessagesUrl(conversationId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListConversationMessagesQueryKey = (conversationId: number) => {
+  return [`/api/conversations/${conversationId}/messages`] as const
+}
+
+export const getListConversationMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listConversationMessages>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListConversationMessagesQueryKey(conversationId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listConversationMessages>>> = ({
+    signal,
+  }) => listConversationMessages(conversationId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: conversationId !== null && conversationId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type ListConversationMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listConversationMessages>>
+>
+export type ListConversationMessagesQueryError = HTTPValidationError
+
+export function useListConversationMessages<
+  TData = Awaited<ReturnType<typeof listConversationMessages>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConversationMessages>>,
+          TError,
+          Awaited<ReturnType<typeof listConversationMessages>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConversationMessages<
+  TData = Awaited<ReturnType<typeof listConversationMessages>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConversationMessages>>,
+          TError,
+          Awaited<ReturnType<typeof listConversationMessages>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConversationMessages<
+  TData = Awaited<ReturnType<typeof listConversationMessages>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Conversation Messages
+ */
+
+export function useListConversationMessages<
+  TData = Awaited<ReturnType<typeof listConversationMessages>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listConversationMessages>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListConversationMessagesQueryOptions(conversationId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }
 
 export const getHealthUrl = () => {
@@ -147,144 +422,13 @@ export function useHealth<TData = Awaited<ReturnType<typeof health>>, TError = u
   return withQueryKey(query, queryOptions.queryKey)
 }
 
-export const getListMessagesUrl = (params?: ListMessagesParams) => {
-  const normalizedParams = new URLSearchParams()
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  })
-
-  const stringifiedParams = normalizedParams.toString()
-
-  return stringifiedParams.length > 0 ? `/api/messages?${stringifiedParams}` : `/api/messages`
-}
-
-/**
- * Return the most recent exchanges, newest first.
- * @summary List Messages
- */
-export const listMessages = async (
-  params?: ListMessagesParams,
-  options?: Parameters<typeof apiFetch>[1],
-): Promise<ExchangeRead[]> => {
-  return apiFetch<ExchangeRead[]>(getListMessagesUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-}
-
-export const getListMessagesQueryKey = (params?: ListMessagesParams) => {
-  return [`/api/messages`, ...(params ? [params] : [])] as const
-}
-
-export const getListMessagesQueryOptions = <
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = HTTPValidationError,
->(
-  params?: ListMessagesParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessages>>, TError, TData>>
-    request?: SecondParameter<typeof apiFetch>
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getListMessagesQueryKey(params)
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessages>>> = ({ signal }) =>
-    listMessages(params, { signal, ...requestOptions })
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listMessages>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof listMessages>>>
-export type ListMessagesQueryError = HTTPValidationError
-
-export function useListMessages<
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = HTTPValidationError,
->(
-  params: undefined | ListMessagesParams,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessages>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listMessages>>,
-          TError,
-          Awaited<ReturnType<typeof listMessages>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof apiFetch>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListMessages<
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = HTTPValidationError,
->(
-  params?: ListMessagesParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessages>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listMessages>>,
-          TError,
-          Awaited<ReturnType<typeof listMessages>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof apiFetch>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListMessages<
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = HTTPValidationError,
->(
-  params?: ListMessagesParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessages>>, TError, TData>>
-    request?: SecondParameter<typeof apiFetch>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary List Messages
- */
-
-export function useListMessages<
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = HTTPValidationError,
->(
-  params?: ListMessagesParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessages>>, TError, TData>>
-    request?: SecondParameter<typeof apiFetch>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getListMessagesQueryOptions(params, options)
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>
-  }
-
-  return withQueryKey(query, queryOptions.queryKey)
-}
-
 export const getSendMessageUrl = () => {
   return `/api/messages`
 }
 
 /**
- * Send a message to the configured model, store the exchange and return it.
+ * Send a message to the chosen model, store the exchange and return it. A message
+ * without a conversation starts one, and the model then writes its title.
  * @summary Send Message
  */
 export const sendMessage = async (
@@ -495,7 +639,7 @@ export const getGetModelSettingsUrl = () => {
 }
 
 /**
- * Return the provider, model and request settings used to answer messages.
+ * Return the providers and models a message can be sent to, and the shared settings.
  * @summary Get Model Settings
  */
 export const getModelSettings = async (

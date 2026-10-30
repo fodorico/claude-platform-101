@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 from google import genai
 from google.genai import errors, types
@@ -10,6 +10,7 @@ from app.services.llm import (
     LLMReply,
     LLMUnavailableError,
     StreamItem,
+    Turn,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,37 +30,44 @@ class GeminiService:
         self,
         client: genai.Client,
         *,
-        model: str,
         max_tokens: int,
         system_prompt: str,
     ) -> None:
         self._client = client
-        self._model = model
         self._max_tokens = max_tokens
         self._system_prompt = system_prompt
 
-    def _config(self) -> types.GenerateContentConfig:
+    def _config(
+        self, system: str | None = None, max_tokens: int | None = None
+    ) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
-            system_instruction=self._system_prompt,
-            max_output_tokens=self._max_tokens,
+            system_instruction=system or self._system_prompt,
+            max_output_tokens=max_tokens or self._max_tokens,
         )
 
-    async def ask(self, prompt: str) -> LLMReply:
+    async def ask(
+        self,
+        messages: Sequence[Turn],
+        *,
+        model: str,
+        system: str | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMReply:
         try:
             response = await self._client.aio.models.generate_content(
-                model=self._model, contents=prompt, config=self._config()
+                model=model, contents=_contents(messages), config=self._config(system, max_tokens)
             )
         except (errors.APIError, OSError) as exc:
             raise _map_error(exc) from exc
         _raise_if_refused(response)
-        return self._to_reply(response.text or "", response)
+        return _to_reply(response.text or "", response, model)
 
-    async def stream(self, prompt: str) -> AsyncIterator[StreamItem]:
+    async def stream(self, messages: Sequence[Turn], *, model: str) -> AsyncIterator[StreamItem]:
         parts: list[str] = []
         last: types.GenerateContentResponse | None = None
         try:
             chunks = await self._client.aio.models.generate_content_stream(
-                model=self._model, contents=prompt, config=self._config()
+                model=model, contents=_contents(messages), config=self._config()
             )
             async for chunk in chunks:
                 _raise_if_refused(chunk)
@@ -69,19 +77,31 @@ class GeminiService:
                     yield chunk.text
         except (errors.APIError, OSError) as exc:
             raise _map_error(exc) from exc
-        yield self._to_reply("".join(parts), last)
+        yield _to_reply("".join(parts), last, model)
 
-    def _to_reply(self, text: str, response: types.GenerateContentResponse | None) -> LLMReply:
-        candidate = response.candidates[0] if response and response.candidates else None
-        finish_reason = candidate.finish_reason if candidate else None
-        usage = response.usage_metadata if response else None
-        return LLMReply(
-            text=text,
-            model=(response.model_version if response else None) or self._model,
-            stop_reason=finish_reason.value if finish_reason else "unknown",
-            input_tokens=(usage.prompt_token_count or 0) if usage else 0,
-            output_tokens=(usage.candidates_token_count or 0) if usage else 0,
+
+def _contents(messages: Sequence[Turn]) -> list[types.Content]:
+    # Gemini calls the assistant's role "model".
+    return [
+        types.Content(
+            role="model" if turn.role == "assistant" else "user",
+            parts=[types.Part(text=turn.text)],
         )
+        for turn in messages
+    ]
+
+
+def _to_reply(text: str, response: types.GenerateContentResponse | None, model: str) -> LLMReply:
+    candidate = response.candidates[0] if response and response.candidates else None
+    finish_reason = candidate.finish_reason if candidate else None
+    usage = response.usage_metadata if response else None
+    return LLMReply(
+        text=text,
+        model=(response.model_version if response else None) or model,
+        stop_reason=finish_reason.value if finish_reason else "unknown",
+        input_tokens=(usage.prompt_token_count or 0) if usage else 0,
+        output_tokens=(usage.candidates_token_count or 0) if usage else 0,
+    )
 
 
 def _map_error(exc: errors.APIError | OSError) -> Exception:

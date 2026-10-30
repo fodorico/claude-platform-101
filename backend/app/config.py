@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://app:app@localhost:5432/app"
 
-    # Which model provider answers the messages.
+    # The provider used when a request doesn't pick one.
     llm_provider: Provider = "claude"
     max_tokens: int = Field(default=16000, gt=0)
     timeout_seconds: float = Field(default=60.0, gt=0)
@@ -28,16 +28,23 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-opus-5-5"
     # Short, simple answers: low effort keeps latency and cost down.
     anthropic_effort: Effort = "low"
+    # Models offered in the model picker, besides ANTHROPIC_MODEL (JSON list in the environment).
+    anthropic_models: list[str] = ["claude-opus-5-5", "claude-sonnet-5-5"]
 
     gemini_api_key: SecretStr | None = None
     # Lite: fastest and cheapest, enough for short answers (flash-latest was timing out).
     gemini_model: str = "gemini-flash-lite-latest"
+    gemini_models: list[str] = ["gemini-flash-lite-latest", "gemini-flash-latest"]
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    @property
-    def llm_model(self) -> str:
-        return self.gemini_model if self.llm_provider == "gemini" else self.anthropic_model
+    def models_for(self, provider: Provider) -> list[str]:
+        """The models offered for a provider, its configured default first."""
+        if provider == "gemini":
+            default, offered = self.gemini_model, self.gemini_models
+        else:
+            default, offered = self.anthropic_model, self.anthropic_models
+        return [default, *(model for model in offered if model != default)]
 
 
 @lru_cache

@@ -1,13 +1,23 @@
 import type { Page } from '@playwright/test'
-import type { ExchangeRead } from '../src/api/generated/model'
+import type { ConversationRead, ExchangeRead, MessageCreate } from '../src/api/generated/model'
 
-export function exchange(id: number, prompt: string, reply: string): ExchangeRead {
+/** The stored conversation that `history` belongs to; open it with `/?chat=1`. */
+export const CHAT_URL = '/?chat=1'
+
+export function exchange(
+  id: number,
+  prompt: string,
+  reply: string,
+  conversationId = 1,
+): ExchangeRead {
   return {
     id,
+    conversation_id: conversationId,
     prompt,
     reply,
-    model: 'claude-opus-5-5',
-    stop_reason: 'end_turn',
+    provider: 'gemini',
+    model: 'gemini-flash-lite-latest',
+    stop_reason: 'STOP',
     input_tokens: 12,
     output_tokens: 34,
     duration_ms: 1200,
@@ -22,30 +32,59 @@ function sse(events: [string, unknown][]): string {
   return events.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join('')
 }
 
+const modelSettings = {
+  default_provider: 'gemini',
+  providers: [
+    { name: 'claude', available: false, models: ['claude-opus-5-5', 'claude-sonnet-5-5'] },
+    {
+      name: 'gemini',
+      available: true,
+      models: ['gemini-flash-lite-latest', 'gemini-flash-latest'],
+    },
+  ],
+  max_tokens: 16000,
+  system_prompt: 'Answer briefly.',
+}
+
+interface Chat {
+  conversation: ConversationRead
+  messages: ExchangeRead[]
+}
+
 /**
- * Fakes the backend for one page: GET /api/messages returns `history` (newest first, like the
- * API) and POST /api/messages/stream answers with `answer(prompt)`, storing successful exchanges.
+ * Fakes the backend for one page. `history` holds the messages (oldest first) of conversation 1,
+ * "Earlier chat"; POST /api/messages/stream answers with `answer(prompt)`, storing successful
+ * exchanges and titling new conversations "Chat: <first message>".
  */
 export async function mockApi(
   page: Page,
   { history = [], answer }: { history?: ExchangeRead[]; answer: (prompt: string) => Answer },
 ) {
-  const stored = [...history]
+  const now = new Date().toISOString()
+  const chats: Chat[] = history.length
+    ? [
+        {
+          conversation: { id: 1, title: 'Earlier chat', created_at: now, updated_at: now },
+          messages: [...history],
+        },
+      ]
+    : []
+  let nextId = 100
 
-  await page.route('**/api/messages?*', (route) => route.fulfill({ json: stored }))
-  await page.route('**/api/model-settings', (route) =>
-    route.fulfill({
-      json: {
-        provider: 'claude',
-        model: 'claude-opus-5-5',
-        max_tokens: 16000,
-        system_prompt: 'Answer briefly.',
-      },
-    }),
+  await page.route('**/api/model-settings', (route) => route.fulfill({ json: modelSettings }))
+  await page.route('**/api/conversations', (route) =>
+    route.fulfill({ json: chats.map((chat) => chat.conversation) }),
   )
+  await page.route('**/api/conversations/*/messages', (route) => {
+    const id = Number(new URL(route.request().url()).pathname.split('/')[3])
+    const chat = chats.find((item) => item.conversation.id === id)
+    return chat
+      ? route.fulfill({ json: chat.messages })
+      : route.fulfill({ status: 404, json: { detail: 'Conversation not found' } })
+  })
   await page.route('**/api/messages/stream', async (route) => {
-    const { content } = route.request().postDataJSON() as { content: string }
-    const result = answer(content)
+    const body = route.request().postDataJSON() as MessageCreate
+    const result = answer(body.content)
     if ('error' in result) {
       await route.fulfill({
         contentType: 'text/event-stream',
@@ -53,16 +92,29 @@ export async function mockApi(
       })
       return
     }
-    const created = exchange(stored.length + 1, content, result.reply)
-    stored.unshift(created)
+    let chat = chats.find((item) => item.conversation.id === body.conversation_id)
+    if (!chat) {
+      const id = nextId++
+      chat = {
+        conversation: { id, title: `Chat: ${body.content}`, created_at: now, updated_at: now },
+        messages: [],
+      }
+      chats.unshift(chat)
+    }
+    const created = exchange(nextId++, body.content, result.reply, chat.conversation.id)
+    chat.messages.push(created)
     const middle = Math.ceil(result.reply.length / 2)
-    await route.fulfill({
-      contentType: 'text/event-stream',
-      body: sse([
-        ['delta', { text: result.reply.slice(0, middle) }],
-        ['delta', { text: result.reply.slice(middle) }],
-        ['done', created],
-      ]),
-    })
+    const events: [string, unknown][] = [
+      ['delta', { text: result.reply.slice(0, middle) }],
+      ['delta', { text: result.reply.slice(middle) }],
+      ['done', created],
+    ]
+    if (body.conversation_id == null) {
+      events.push([
+        'title',
+        { conversation_id: chat.conversation.id, title: chat.conversation.title },
+      ])
+    }
+    await route.fulfill({ contentType: 'text/event-stream', body: sse(events) })
   })
 }

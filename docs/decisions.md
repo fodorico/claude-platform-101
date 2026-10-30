@@ -43,3 +43,13 @@
   `first_token_ms`; older rows have none) and returns stop reason and token usage, which were
   already stored. `GET /api/model-settings` exposes provider, model, max tokens and system prompt
   for the details panel; this is a practice app, so showing the system prompt is intended.
+- **2026-10-30 — Conversations, titles and model picker.** Exchanges belong to a conversation and
+  each message is sent with the conversation's last 20 exchanges as context. A conversation is
+  created with its first successful answer (failed first messages leave nothing behind), titled
+  with the shortened first message, then retitled by the same model in a second short request
+  (`title` server-sent event; the shortened message stays if that fails). The open chat lives in
+  the URL (`/?chat=12`), so the page doesn't remount when a new chat gets its id mid-stream.
+  Each request picks provider and model; `LLMRegistry` holds a service per provider with an API
+  key, and the offered models come from `ANTHROPIC_MODELS` / `GEMINI_MODELS`. Providers without
+  a key are listed but disabled in the picker. The migration turned each earlier exchange into its
+  own conversation and inferred its provider from the model name. `GET /api/messages` was removed.

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import anthropic
@@ -12,6 +12,7 @@ from app.services.llm import (
     LLMReply,
     LLMUnavailableError,
     StreamItem,
+    Turn,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,38 +27,52 @@ class ClaudeService:
         self,
         client: anthropic.AsyncAnthropic,
         *,
-        model: str,
         effort: Effort,
         max_tokens: int,
         system_prompt: str,
     ) -> None:
         self._client = client
-        self._model = model
         self._effort: Effort = effort
         self._max_tokens = max_tokens
         self._system_prompt = system_prompt
 
-    def _request(self, prompt: str) -> dict[str, Any]:
+    def _request(
+        self,
+        messages: Sequence[Turn],
+        model: str,
+        system: str | None = None,
+        max_tokens: int | None = None,
+    ) -> dict[str, Any]:
         return {
-            "model": self._model,
-            "max_tokens": self._max_tokens,
-            "system": self._system_prompt,
+            "model": model,
+            "max_tokens": max_tokens or self._max_tokens,
+            "system": system or self._system_prompt,
             "output_config": {"effort": self._effort},
             "betas": [FALLBACK_BETA],
             "fallbacks": "default",
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": turn.role, "content": turn.text} for turn in messages],
         }
 
-    async def ask(self, prompt: str) -> LLMReply:
+    async def ask(
+        self,
+        messages: Sequence[Turn],
+        *,
+        model: str,
+        system: str | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMReply:
+        request = self._request(messages, model, system, max_tokens)
         try:
-            response = await self._client.beta.messages.create(**self._request(prompt))
+            response = await self._client.beta.messages.create(**request)
         except anthropic.APIError as exc:
             raise _map_error(exc) from exc
         return _to_reply(response)
 
-    async def stream(self, prompt: str) -> AsyncIterator[StreamItem]:
+    async def stream(self, messages: Sequence[Turn], *, model: str) -> AsyncIterator[StreamItem]:
         try:
-            async with self._client.beta.messages.stream(**self._request(prompt)) as stream:
+            async with self._client.beta.messages.stream(
+                **self._request(messages, model)
+            ) as stream:
                 async for text in stream.text_stream:
                     yield text
                 response = await stream.get_final_message()

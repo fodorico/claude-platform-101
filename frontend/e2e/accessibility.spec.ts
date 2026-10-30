@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { exchange, mockApi } from './mock-api'
+import { CHAT_URL, exchange, mockApi } from './mock-api'
 
 // WCAG 2.2 A and AA rules, checked on every screen state in both themes.
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -35,12 +35,12 @@ for (const theme of ['nord', 'dim'] as const) {
     test('conversation has no accessibility violations', async ({ page }) => {
       await mockApi(page, {
         history: [
-          exchange(2, 'And in one line?', 'A contract between **programs**.'),
           exchange(1, 'What is an API?', 'An API is:\n\n- a contract\n- with `endpoints`'),
+          exchange(2, 'And in one line?', 'A contract between **programs**.'),
         ],
         answer: () => ({ reply: 'ok' }),
       })
-      await page.goto('/')
+      await page.goto(CHAT_URL)
       await expect(page.getByText('A contract between')).toBeVisible()
 
       await expectNoViolations(page)
@@ -54,7 +54,7 @@ for (const theme of ['nord', 'dim'] as const) {
         history: [exchange(1, 'What is an API?', 'A contract between **programs**.')],
         answer: () => ({ reply: 'ok' }),
       })
-      await page.goto('/')
+      await page.goto(CHAT_URL)
       await expect(page.getByText('Answer briefly.')).toBeVisible()
 
       await expectNoViolations(page)
