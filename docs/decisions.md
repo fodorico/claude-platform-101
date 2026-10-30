@@ -84,3 +84,9 @@
   - *API call inspector.* Each exchange stores the request parameters and the provider's raw
     usage (`api_call`, JSONB); the messages are rebuilt from the stored context ids, with image
     bytes replaced by their size.
+- **2026-10-30 — Reload after a deploy.** The build emits `version.json` with a unique id and
+  nginx serves it with `no-store`; open pages poll it every 5 s while visible (production builds
+  only) and reload when it changes, unless the user is busy (typed text, an answer streaming or a
+  dialog open), in which case they show a Reload notice. nginx re-resolves the `api` host through
+  Docker's DNS (`resolver 127.0.0.11`), so recreating only the API container no longer leaves
+  nginx pointing at the old IP (502).

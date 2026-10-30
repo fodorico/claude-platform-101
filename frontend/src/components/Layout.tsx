@@ -4,6 +4,7 @@ import { ModelChoiceProvider } from '../features/models/ModelChoiceProvider'
 import { ModelPicker } from '../features/models/ModelPicker'
 import { PanelsProvider } from '../features/panels/PanelsProvider'
 import { usePanels, type PanelName } from '../features/panels/panels'
+import { NewVersionNotice } from '../features/version/NewVersionNotice'
 import { Shortcuts } from './Shortcuts'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -62,6 +63,7 @@ export function Layout() {
           <main className="flex min-h-0 flex-1">
             <Outlet />
           </main>
+          <NewVersionNotice />
         </div>
       </ModelChoiceProvider>
     </PanelsProvider>

@@ -26,6 +26,10 @@ docker compose up --build
 
 Open http://localhost:8080. Migrations run automatically when the API starts.
 
+Open pages check `/version.json` (written by each build) every few seconds and reload
+themselves after `docker compose up -d --build`; if you are typing, an answer is being written or
+a dialog is open, they offer a Reload button instead. In development, Vite reloads on its own.
+
 ## Local development
 
 Requirements: `uv`, Node 26, Docker.
