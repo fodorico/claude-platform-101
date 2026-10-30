@@ -7,12 +7,8 @@ import anthropic
 import httpx2
 import pytest
 
-from app.services.claude import (
-    ClaudeRateLimitError,
-    ClaudeRefusalError,
-    ClaudeService,
-    ClaudeUnavailableError,
-)
+from app.services.claude import ClaudeService
+from app.services.llm import LLMRateLimitError, LLMRefusalError, LLMUnavailableError
 
 
 def make_service(handler: Any) -> tuple[ClaudeService, list[dict[str, Any]]]:
@@ -77,13 +73,13 @@ async def test_ask_raises_on_refusal() -> None:
     )
     service, _ = make_service(lambda _: httpx2.Response(200, json=body))
 
-    with pytest.raises(ClaudeRefusalError):
+    with pytest.raises(LLMRefusalError):
         await service.ask("Hi")
 
 
 @pytest.mark.parametrize(
     ("status_code", "expected_error"),
-    [(429, ClaudeRateLimitError), (529, ClaudeUnavailableError), (500, ClaudeUnavailableError)],
+    [(429, LLMRateLimitError), (529, LLMUnavailableError), (500, LLMUnavailableError)],
 )
 async def test_ask_maps_api_errors(status_code: int, expected_error: type[Exception]) -> None:
     error = {"type": "error", "error": {"type": "api_error", "message": "boom"}}
@@ -99,5 +95,5 @@ async def test_ask_maps_connection_errors() -> None:
 
     service, _ = make_service(fail)
 
-    with pytest.raises(ClaudeUnavailableError):
+    with pytest.raises(LLMUnavailableError):
         await service.ask("Hi")

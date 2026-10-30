@@ -283,7 +283,7 @@ export const getSendMessageUrl = () => {
 }
 
 /**
- * Send a message to Claude, store the exchange and return it.
+ * Send a message to the configured model, store the exchange and return it.
  * @summary Send Message
  */
 export const sendMessage = async (

@@ -7,30 +7,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models import Exchange
 from app.schemas import ExchangeRead, MessageCreate
-from app.services.claude import (
-    ClaudeRateLimitError,
-    ClaudeRefusalError,
-    ClaudeService,
-    ClaudeUnavailableError,
-    get_claude_service,
+from app.services.llm import (
+    LLMRateLimitError,
+    LLMRefusalError,
+    LLMService,
+    LLMUnavailableError,
+    get_llm_service,
 )
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-ClaudeDep = Annotated[ClaudeService, Depends(get_claude_service)]
+LLMDep = Annotated[LLMService, Depends(get_llm_service)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def send_message(body: MessageCreate, session: SessionDep, claude: ClaudeDep) -> ExchangeRead:
-    """Send a message to Claude, store the exchange and return it."""
+async def send_message(body: MessageCreate, session: SessionDep, llm: LLMDep) -> ExchangeRead:
+    """Send a message to the configured model, store the exchange and return it."""
     try:
-        reply = await claude.ask(body.content)
-    except ClaudeRefusalError as exc:
+        reply = await llm.ask(body.content)
+    except LLMRefusalError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    except ClaudeRateLimitError as exc:
+    except LLMRateLimitError as exc:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
-    except ClaudeUnavailableError as exc:
+    except LLMUnavailableError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
 
     exchange = Exchange(

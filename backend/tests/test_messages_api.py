@@ -1,11 +1,11 @@
 import pytest
 from httpx import AsyncClient
 
-from app.services.claude import (
-    ClaudeError,
-    ClaudeRateLimitError,
-    ClaudeRefusalError,
-    ClaudeUnavailableError,
+from app.services.llm import (
+    LLMError,
+    LLMRateLimitError,
+    LLMRefusalError,
+    LLMUnavailableError,
 )
 from tests.conftest import FakeClaudeService
 
@@ -49,15 +49,15 @@ async def test_send_message_rejects_invalid_content(
 @pytest.mark.parametrize(
     ("error", "expected_status"),
     [
-        (ClaudeRefusalError("declined"), 422),
-        (ClaudeRateLimitError("rate limited"), 429),
-        (ClaudeUnavailableError("down"), 503),
+        (LLMRefusalError("declined"), 422),
+        (LLMRateLimitError("rate limited"), 429),
+        (LLMUnavailableError("down"), 503),
     ],
 )
 async def test_claude_errors_map_to_http_status_and_store_nothing(
     client: AsyncClient,
     fake_claude: FakeClaudeService,
-    error: ClaudeError,
+    error: LLMError,
     expected_status: int,
 ) -> None:
     fake_claude.error = error

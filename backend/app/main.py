@@ -1,20 +1,57 @@
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import anthropic
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from google import genai
+from google.genai import types as genai_types
+from pydantic import SecretStr
 
 from app.api import health, messages
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.services.claude import ClaudeService
+from app.services.gemini import GeminiService
+from app.services.llm import LLMService
 
 
 def _operation_id(route: APIRoute) -> str:
     return route.name
+
+
+def _secret(value: SecretStr | None) -> str | None:
+    return value.get_secret_value() if value else None
+
+
+def build_llm_service(settings: Settings, stack: AsyncExitStack) -> LLMService:
+    """Create the configured provider's client; `stack` closes it on shutdown."""
+    if settings.llm_provider == "gemini":
+        gemini_client = genai.Client(
+            api_key=_secret(settings.gemini_api_key),
+            http_options=genai_types.HttpOptions(timeout=int(settings.timeout_seconds * 1000)),
+        )
+        stack.push_async_callback(gemini_client.aio.aclose)
+        return GeminiService(
+            gemini_client,
+            model=settings.gemini_model,
+            max_tokens=settings.max_tokens,
+            system_prompt=settings.system_prompt,
+        )
+
+    claude_client = anthropic.AsyncAnthropic(
+        api_key=_secret(settings.anthropic_api_key), timeout=settings.timeout_seconds
+    )
+    stack.push_async_callback(claude_client.close)
+    return ClaudeService(
+        claude_client,
+        model=settings.anthropic_model,
+        effort=settings.anthropic_effort,
+        max_tokens=settings.max_tokens,
+        system_prompt=settings.system_prompt,
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,23 +59,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = create_engine(settings.database_url)
-        api_key = settings.anthropic_api_key
-        client = anthropic.AsyncAnthropic(
-            api_key=api_key.get_secret_value() if api_key else None,
-            timeout=settings.anthropic_timeout_seconds,
-        )
-        app.state.session_factory = create_session_factory(engine)
-        app.state.claude_service = ClaudeService(
-            client,
-            model=settings.anthropic_model,
-            effort=settings.anthropic_effort,
-            max_tokens=settings.anthropic_max_tokens,
-            system_prompt=settings.system_prompt,
-        )
-        yield
-        await client.close()
-        await engine.dispose()
+        async with AsyncExitStack() as stack:
+            engine = create_engine(settings.database_url)
+            stack.push_async_callback(engine.dispose)
+            app.state.session_factory = create_session_factory(engine)
+            app.state.llm_service = build_llm_service(settings, stack)
+            yield
 
     app = FastAPI(
         title="Claude Platform 101 API",

@@ -1,13 +1,14 @@
 # Claude Platform 101
 
 A small full-stack app built while taking Claude Platform 101: you send a message, the backend
-asks Claude, and the question and answer are stored and shown as a history.
+asks the configured model (Claude by default, or Gemini), and the question and answer are stored
+and shown as a history.
 
 ## Stack
 
 - **Backend** (`backend/`): Python 3.15, FastAPI + Uvicorn, pydantic-settings, PostgreSQL with
-  SQLAlchemy 2 (async) + Alembic, Anthropic Python SDK. Ruff, mypy (strict), pytest +
-  Testcontainers.
+  SQLAlchemy 2 (async) + Alembic, Anthropic Python SDK and Google Gen AI SDK. Ruff, mypy
+  (strict), pytest + Testcontainers.
 - **Frontend** (`frontend/`): React + TypeScript (strict), Vite, React Router, TanStack Query,
   React Hook Form + Zod, Tailwind CSS + daisyUI, lucide-react, Motion. ESLint, Prettier, Vitest.
   Served by nginx in production.
@@ -18,7 +19,7 @@ asks Claude, and the question and answer are stored and shown as a history.
 ## Run everything with Docker
 
 ```bash
-cp .env.example .env   # then set ANTHROPIC_API_KEY
+cp .env.example .env   # then set ANTHROPIC_API_KEY, or LLM_PROVIDER=gemini + GEMINI_API_KEY
 docker compose up --build
 ```
 
@@ -35,7 +36,7 @@ docker run -d --name cp101-db -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app \
 
 # Backend (http://localhost:8000, docs at /docs)
 cd backend
-cp .env.example .env   # set ANTHROPIC_API_KEY
+cp .env.example .env   # set the provider's API key
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
@@ -71,9 +72,13 @@ Backend settings are environment variables (see `backend/app/config.py`):
 | Variable | Default | |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://app:app@localhost:5432/app` | |
-| `ANTHROPIC_API_KEY` | — | Required to talk to Claude |
+| `LLM_PROVIDER` | `claude` | `claude` or `gemini` |
+| `ANTHROPIC_API_KEY` | — | Required when the provider is `claude` |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | |
 | `ANTHROPIC_EFFORT` | `low` | `low` to `max`; low keeps simple answers fast and cheap |
-| `ANTHROPIC_MAX_TOKENS` | `16000` | |
+| `GEMINI_API_KEY` | — | Required when the provider is `gemini` |
+| `GEMINI_MODEL` | `gemini-flash-lite-latest` | |
+| `MAX_TOKENS` | `16000` | Maximum answer length, both providers |
+| `TIMEOUT_SECONDS` | `60` | |
 | `SYSTEM_PROMPT` | Brief, simple answers | |
 | `CORS_ORIGINS` | `["http://localhost:5173"]` | JSON list |
