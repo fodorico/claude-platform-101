@@ -46,3 +46,12 @@ export function resolveChoice(
   if (!fallback || !isProvider(fallback.name)) return null
   return { provider: fallback.name, model: fallback.models[0] ?? '' }
 }
+
+/** Every model a message can be sent to now (providers with an API key). */
+export function usableModels(settings: ModelSettingsRead | undefined): ModelChoice[] {
+  return (settings?.providers ?? []).flatMap((provider) =>
+    provider.available && isProvider(provider.name)
+      ? provider.models.map((model) => ({ provider: provider.name as Provider, model }))
+      : [],
+  )
+}

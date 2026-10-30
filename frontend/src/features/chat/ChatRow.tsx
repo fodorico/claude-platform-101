@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, Ellipsis, Pencil, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Ellipsis, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { ConversationRead } from '../../api/generated/model'
 
@@ -13,6 +13,7 @@ interface ChatRowProps {
   onToggleSelected: () => void
   onToggleMenu: () => void
   onRename: (title: string) => void
+  onPin: () => void
   onArchive: () => void
   onDelete: () => void
 }
@@ -27,11 +28,13 @@ export function ChatRow({
   onToggleSelected,
   onToggleMenu,
   onRename,
+  onPin,
   onArchive,
   onDelete,
 }: ChatRowProps) {
   const [isRenaming, setIsRenaming] = useState(false)
   const isArchived = conversation.archived_at !== null
+  const isPinned = conversation.pinned_at !== null
   const rowClass = `rounded-lg text-sm ${isCurrent ? 'bg-base-200 font-medium' : ''}`
 
   if (isSelecting) {
@@ -88,10 +91,16 @@ export function ChatRow({
         <button
           type="button"
           aria-current={isCurrent ? 'page' : undefined}
-          className="min-w-0 flex-1 truncate px-2 py-2.5 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2.5 text-left"
           onClick={onOpen}
         >
-          {conversation.title}
+          {isPinned && (
+            <>
+              <Pin aria-hidden className="size-3 shrink-0 text-primary" />
+              <span className="sr-only">Pinned: </span>
+            </>
+          )}
+          <span className="truncate">{conversation.title}</span>
         </button>
         <button
           type="button"
@@ -115,6 +124,14 @@ export function ChatRow({
           >
             <Pencil aria-hidden className="size-4" />
             Rename
+          </button>
+          <button type="button" className={menuItem} onClick={onPin}>
+            {isPinned ? (
+              <PinOff aria-hidden className="size-4" />
+            ) : (
+              <Pin aria-hidden className="size-4" />
+            )}
+            {isPinned ? 'Unpin' : 'Pin'}
           </button>
           <button type="button" className={menuItem} onClick={onArchive}>
             {isArchived ? (

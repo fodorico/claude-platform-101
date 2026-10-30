@@ -4,6 +4,8 @@
  * Claude Platform 101 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ChatSettings } from './chatSettings'
+import type { ImageCreate } from './imageCreate'
 import type { MessageCreateProvider } from './messageCreateProvider'
 
 export interface MessageCreate {
@@ -13,7 +15,10 @@ export interface MessageCreate {
    */
   content: string
   conversation_id?: number | null
+  /** @maxItems 4 */
+  images?: ImageCreate[]
   model?: string | null
   provider?: MessageCreateProvider
   replaces_id?: number | null
+  settings?: ChatSettings | null
 }

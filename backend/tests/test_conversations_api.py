@@ -158,3 +158,88 @@ async def test_search_matches_titles_and_messages_in_any_case(client: AsyncClien
     assert await search("100%") == ["Fake title"]
     assert await search("%") == ["Fake title"]  # literal, not a wildcard
     assert await search("nothing here") == []
+
+
+async def test_pinned_chats_are_listed_first(client: AsyncClient) -> None:
+    older = (await client.post("/api/messages", json={"content": "Older"})).json()
+    await client.post("/api/messages", json={"content": "Newer"})
+
+    pinned = await client.patch(
+        f"/api/conversations/{older['conversation_id']}", json={"pinned": True}
+    )
+
+    assert pinned.json()["pinned_at"] is not None
+    listed = (await client.get("/api/conversations")).json()
+    assert listed[0]["id"] == older["conversation_id"]
+    await client.patch(f"/api/conversations/{older['conversation_id']}", json={"pinned": False})
+    listed = (await client.get("/api/conversations")).json()
+    assert listed[-1]["id"] == older["conversation_id"]
+
+
+async def test_fork_copies_settings_and_messages_up_to_the_chosen_one(
+    client: AsyncClient,
+) -> None:
+    images = [{"media_type": "image/png", "data": "iVBORw0KGgo="}]
+    first = (
+        await client.post(
+            "/api/messages",
+            json={"content": "One", "images": images, "settings": {"system_prompt": "Pirate."}},
+        )
+    ).json()
+    conversation_id = first["conversation_id"]
+    second = (
+        await client.post(
+            "/api/messages", json={"content": "Two", "conversation_id": conversation_id}
+        )
+    ).json()
+    await client.post(
+        "/api/messages", json={"content": "Three", "conversation_id": conversation_id}
+    )
+
+    response = await client.post(
+        f"/api/conversations/{conversation_id}/fork", json={"exchange_id": second["id"]}
+    )
+
+    assert response.status_code == 201
+    fork = response.json()
+    assert fork["id"] != conversation_id
+    assert fork["title"] == "Fake title (fork)"
+    assert fork["system_prompt"] == "Pirate."
+    messages = (await client.get(f"/api/conversations/{fork['id']}/messages")).json()
+    assert [item["prompt"] for item in messages] == ["One", "Two"]
+    assert len(messages[0]["attachments"]) == 1
+
+
+async def test_fork_needs_an_active_message_of_the_chat(client: AsyncClient) -> None:
+    first = (await client.post("/api/messages", json={"content": "One"})).json()
+    other = (await client.post("/api/messages", json={"content": "Other"})).json()
+
+    wrong_chat = await client.post(
+        f"/api/conversations/{first['conversation_id']}/fork", json={"exchange_id": other["id"]}
+    )
+    missing = await client.post("/api/conversations/999/fork", json={"exchange_id": first["id"]})
+
+    assert wrong_chat.status_code == 422
+    assert missing.status_code == 404
+
+
+async def test_prompt_library_crud(client: AsyncClient) -> None:
+    created = await client.post(
+        "/api/prompts", json={"title": " Summarize ", "content": "Summarize this:"}
+    )
+    assert created.status_code == 201
+    prompt = created.json()
+    assert prompt["title"] == "Summarize"
+    await client.post("/api/prompts", json={"title": "Explain", "content": "Explain simply:"})
+
+    listed = (await client.get("/api/prompts")).json()
+    assert [item["title"] for item in listed] == ["Explain", "Summarize"]
+
+    updated = await client.put(
+        f"/api/prompts/{prompt['id']}", json={"title": "Sum up", "content": "Sum up:"}
+    )
+    assert updated.json()["content"] == "Sum up:"
+    assert (await client.delete(f"/api/prompts/{prompt['id']}")).status_code == 204
+    assert (await client.delete(f"/api/prompts/{prompt['id']}")).status_code == 404
+    blank = await client.post("/api/prompts", json={"title": " ", "content": "x"})
+    assert blank.status_code == 422

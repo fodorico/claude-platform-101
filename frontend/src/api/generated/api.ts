@@ -21,16 +21,22 @@ import type {
 } from '@tanstack/react-query'
 
 import type {
+  ApiCallRead,
   ConversationBulkAction,
   ConversationBulkResult,
+  ConversationFork,
   ConversationRead,
   ConversationUpdate,
   ExchangeRead,
+  ExchangeUpdate,
   HTTPValidationError,
   HealthRead,
   ListConversationsParams,
   MessageCreate,
   ModelSettingsRead,
+  PromptCreate,
+  PromptRead,
+  TokenCount,
 } from './model'
 
 import { apiFetch } from '../http'
@@ -51,6 +57,131 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result
 }
 
+export const getGetAttachmentUrl = (attachmentId: number) => {
+  return `/api/attachments/${attachmentId}`
+}
+
+/**
+ * Return an image sent with a message.
+ * @summary Get Attachment
+ */
+export const getAttachment = async (
+  attachmentId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Blob> => {
+  return apiFetch<Blob>(getGetAttachmentUrl(attachmentId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAttachmentQueryKey = (attachmentId: number) => {
+  return [`/api/attachments/${attachmentId}`] as const
+}
+
+export const getGetAttachmentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAttachment>>,
+  TError = HTTPValidationError,
+>(
+  attachmentId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAttachmentQueryKey(attachmentId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttachment>>> = ({ signal }) =>
+    getAttachment(attachmentId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: attachmentId !== null && attachmentId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetAttachmentQueryResult = NonNullable<Awaited<ReturnType<typeof getAttachment>>>
+export type GetAttachmentQueryError = HTTPValidationError
+
+export function useGetAttachment<
+  TData = Awaited<ReturnType<typeof getAttachment>>,
+  TError = HTTPValidationError,
+>(
+  attachmentId: number,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAttachment>>,
+          TError,
+          Awaited<ReturnType<typeof getAttachment>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAttachment<
+  TData = Awaited<ReturnType<typeof getAttachment>>,
+  TError = HTTPValidationError,
+>(
+  attachmentId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAttachment>>,
+          TError,
+          Awaited<ReturnType<typeof getAttachment>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAttachment<
+  TData = Awaited<ReturnType<typeof getAttachment>>,
+  TError = HTTPValidationError,
+>(
+  attachmentId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Attachment
+ */
+
+export function useGetAttachment<
+  TData = Awaited<ReturnType<typeof getAttachment>>,
+  TError = HTTPValidationError,
+>(
+  attachmentId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAttachment>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAttachmentQueryOptions(attachmentId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
 export const getListConversationsUrl = (params?: ListConversationsParams) => {
   const normalizedParams = new URLSearchParams()
 
@@ -68,8 +199,9 @@ export const getListConversationsUrl = (params?: ListConversationsParams) => {
 }
 
 /**
- * Return the active (or, with `archived=true`, the archived) conversations, most recent
- * activity first. `q` keeps those whose title or messages contain it (any case).
+ * Return the active (or, with `archived=true`, the archived) conversations: pinned ones
+ * first, then most recent activity first. `q` keeps those whose title or messages contain it
+ * (any case).
  * @summary List Conversations
  */
 export const listConversations = async (
@@ -511,7 +643,7 @@ export const getUpdateConversationUrl = (conversationId: number) => {
 }
 
 /**
- * Rename a conversation, archive it or bring it back.
+ * Rename a conversation, archive or pin it (or undo that), or change its settings.
  * @summary Update Conversation
  */
 export const updateConversation = async (
@@ -617,12 +749,122 @@ export const useUpdateConversation = <TError = HTTPValidationError, TContext = u
   return useMutation(getUpdateConversationMutationOptions(options), queryClient)
 }
 
+export const getForkConversationUrl = (conversationId: number) => {
+  return `/api/conversations/${conversationId}/fork`
+}
+
+/**
+ * Start a new chat with this one's settings and its messages up to and including
+ * `exchange_id` (the active versions only), to take the conversation another way.
+ * @summary Fork Conversation
+ */
+export const forkConversation = async (
+  conversationId: number,
+  conversationFork: ConversationFork,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationRead> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<ConversationRead>(getForkConversationUrl(conversationId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(conversationFork),
+  })
+}
+
+export const getForkConversationMutationKey = () => ['forkConversation'] as const
+
+export const getForkConversationMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forkConversation>>,
+    TError,
+    ForkConversationMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof forkConversation>>,
+  TError,
+  ForkConversationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getForkConversationMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof forkConversation>>,
+    ForkConversationMutationVariables
+  > = (props) => {
+    const { conversationId, data } = props ?? {}
+
+    return forkConversation(conversationId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ForkConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof forkConversation>>
+>
+export type ForkConversationMutationBody = ConversationFork
+export type ForkConversationMutationError = HTTPValidationError
+export type ForkConversationMutationVariables = { conversationId: number; data: ConversationFork }
+
+/**
+ * @summary Fork Conversation
+ */
+export const useForkConversation = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof forkConversation>>,
+      TError,
+      ForkConversationMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof forkConversation>>,
+  TError,
+  ForkConversationMutationVariables,
+  TContext
+> => {
+  return useMutation(getForkConversationMutationOptions(options), queryClient)
+}
+
 export const getListConversationMessagesUrl = (conversationId: number) => {
   return `/api/conversations/${conversationId}/messages`
 }
 
 /**
- * Return a conversation's exchanges, oldest first.
+ * Return a conversation's exchanges, oldest first, including every version of a message
+ * (`version_group`); the context sent to the model is made of the active ones.
  * @summary List Conversation Messages
  */
 export const listConversationMessages = async (
@@ -747,6 +989,239 @@ export function useListConversationMessages<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getListConversationMessagesQueryOptions(conversationId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getUpdateExchangeUrl = (exchangeId: number) => {
+  return `/api/exchanges/${exchangeId}`
+}
+
+/**
+ * Rate an answer, or make this version of the conversation's last message the active one
+ * (earlier messages keep their version, so later context stays consistent).
+ * @summary Update Exchange
+ */
+export const updateExchange = async (
+  exchangeId: number,
+  exchangeUpdate: ExchangeUpdate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ExchangeRead> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<ExchangeRead>(getUpdateExchangeUrl(exchangeId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(exchangeUpdate),
+  })
+}
+
+export const getUpdateExchangeMutationKey = () => ['updateExchange'] as const
+
+export const getUpdateExchangeMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateExchange>>,
+    TError,
+    UpdateExchangeMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateExchange>>,
+  TError,
+  UpdateExchangeMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdateExchangeMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateExchange>>,
+    UpdateExchangeMutationVariables
+  > = (props) => {
+    const { exchangeId, data } = props ?? {}
+
+    return updateExchange(exchangeId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateExchangeMutationResult = NonNullable<Awaited<ReturnType<typeof updateExchange>>>
+export type UpdateExchangeMutationBody = ExchangeUpdate
+export type UpdateExchangeMutationError = HTTPValidationError
+export type UpdateExchangeMutationVariables = { exchangeId: number; data: ExchangeUpdate }
+
+/**
+ * @summary Update Exchange
+ */
+export const useUpdateExchange = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateExchange>>,
+      TError,
+      UpdateExchangeMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateExchange>>,
+  TError,
+  UpdateExchangeMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdateExchangeMutationOptions(options), queryClient)
+}
+
+export const getGetApiCallUrl = (exchangeId: number) => {
+  return `/api/exchanges/${exchangeId}/api-call`
+}
+
+/**
+ * What was sent to the provider for this answer and the usage it returned. The messages
+ * are rebuilt from the stored exchanges (earlier messages deleted since are left out).
+ * @summary Get Api Call
+ */
+export const getApiCall = async (
+  exchangeId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ApiCallRead> => {
+  return apiFetch<ApiCallRead>(getGetApiCallUrl(exchangeId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetApiCallQueryKey = (exchangeId: number) => {
+  return [`/api/exchanges/${exchangeId}/api-call`] as const
+}
+
+export const getGetApiCallQueryOptions = <
+  TData = Awaited<ReturnType<typeof getApiCall>>,
+  TError = HTTPValidationError,
+>(
+  exchangeId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetApiCallQueryKey(exchangeId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCall>>> = ({ signal }) =>
+    getApiCall(exchangeId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: exchangeId !== null && exchangeId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetApiCallQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCall>>>
+export type GetApiCallQueryError = HTTPValidationError
+
+export function useGetApiCall<
+  TData = Awaited<ReturnType<typeof getApiCall>>,
+  TError = HTTPValidationError,
+>(
+  exchangeId: number,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCall>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCall>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCall<
+  TData = Awaited<ReturnType<typeof getApiCall>>,
+  TError = HTTPValidationError,
+>(
+  exchangeId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCall>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCall>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCall<
+  TData = Awaited<ReturnType<typeof getApiCall>>,
+  TError = HTTPValidationError,
+>(
+  exchangeId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Api Call
+ */
+
+export function useGetApiCall<
+  TData = Awaited<ReturnType<typeof getApiCall>>,
+  TError = HTTPValidationError,
+>(
+  exchangeId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCall>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetApiCallQueryOptions(exchangeId, options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>
@@ -959,6 +1434,114 @@ export const useSendMessage = <TError = HTTPValidationError, TContext = unknown>
   TContext
 > => {
   return useMutation(getSendMessageMutationOptions(options), queryClient)
+}
+
+export const getCountMessageTokensUrl = () => {
+  return `/api/messages/count-tokens`
+}
+
+/**
+ * Count the input tokens the message would use with its conversation's context, without
+ * sending it. Gemini counts the messages only, not the system prompt.
+ * @summary Count Message Tokens
+ */
+export const countMessageTokens = async (
+  messageCreate: MessageCreate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<TokenCount> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<TokenCount>(getCountMessageTokensUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(messageCreate),
+  })
+}
+
+export const getCountMessageTokensMutationKey = () => ['countMessageTokens'] as const
+
+export const getCountMessageTokensMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof countMessageTokens>>,
+    TError,
+    CountMessageTokensMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof countMessageTokens>>,
+  TError,
+  CountMessageTokensMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCountMessageTokensMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof countMessageTokens>>,
+    CountMessageTokensMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return countMessageTokens(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CountMessageTokensMutationResult = NonNullable<
+  Awaited<ReturnType<typeof countMessageTokens>>
+>
+export type CountMessageTokensMutationBody = MessageCreate
+export type CountMessageTokensMutationError = HTTPValidationError
+export type CountMessageTokensMutationVariables = { data: MessageCreate }
+
+/**
+ * @summary Count Message Tokens
+ */
+export const useCountMessageTokens = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof countMessageTokens>>,
+      TError,
+      CountMessageTokensMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof countMessageTokens>>,
+  TError,
+  CountMessageTokensMutationVariables,
+  TContext
+> => {
+  return useMutation(getCountMessageTokensMutationOptions(options), queryClient)
 }
 
 export const getStreamMessageUrl = () => {
@@ -1179,4 +1762,401 @@ export function useGetModelSettings<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListPromptsUrl = () => {
+  return `/api/prompts`
+}
+
+/**
+ * Return the saved prompts, alphabetically.
+ * @summary List Prompts
+ */
+export const listPrompts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PromptRead[]> => {
+  return apiFetch<PromptRead[]>(getListPromptsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListPromptsQueryKey = () => {
+  return [`/api/prompts`] as const
+}
+
+export const getListPromptsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPrompts>>,
+  TError = unknown,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPrompts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListPromptsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPrompts>>> = ({ signal }) =>
+    listPrompts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPrompts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPromptsQueryResult = NonNullable<Awaited<ReturnType<typeof listPrompts>>>
+export type ListPromptsQueryError = unknown
+
+export function useListPrompts<TData = Awaited<ReturnType<typeof listPrompts>>, TError = unknown>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPrompts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPrompts>>,
+          TError,
+          Awaited<ReturnType<typeof listPrompts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPrompts<TData = Awaited<ReturnType<typeof listPrompts>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPrompts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPrompts>>,
+          TError,
+          Awaited<ReturnType<typeof listPrompts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPrompts<TData = Awaited<ReturnType<typeof listPrompts>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPrompts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Prompts
+ */
+
+export function useListPrompts<TData = Awaited<ReturnType<typeof listPrompts>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPrompts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListPromptsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreatePromptUrl = () => {
+  return `/api/prompts`
+}
+
+/**
+ * Save a prompt to reuse later.
+ * @summary Create Prompt
+ */
+export const createPrompt = async (
+  promptCreate: PromptCreate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PromptRead> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<PromptRead>(getCreatePromptUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(promptCreate),
+  })
+}
+
+export const getCreatePromptMutationKey = () => ['createPrompt'] as const
+
+export const getCreatePromptMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPrompt>>,
+    TError,
+    CreatePromptMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPrompt>>,
+  TError,
+  CreatePromptMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreatePromptMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPrompt>>,
+    CreatePromptMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createPrompt(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreatePromptMutationResult = NonNullable<Awaited<ReturnType<typeof createPrompt>>>
+export type CreatePromptMutationBody = PromptCreate
+export type CreatePromptMutationError = HTTPValidationError
+export type CreatePromptMutationVariables = { data: PromptCreate }
+
+/**
+ * @summary Create Prompt
+ */
+export const useCreatePrompt = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createPrompt>>,
+      TError,
+      CreatePromptMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createPrompt>>,
+  TError,
+  CreatePromptMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreatePromptMutationOptions(options), queryClient)
+}
+
+export const getDeletePromptUrl = (promptId: number) => {
+  return `/api/prompts/${promptId}`
+}
+
+/**
+ * Delete a saved prompt.
+ * @summary Delete Prompt
+ */
+export const deletePrompt = async (
+  promptId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeletePromptUrl(promptId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeletePromptMutationKey = () => ['deletePrompt'] as const
+
+export const getDeletePromptMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePrompt>>,
+    TError,
+    DeletePromptMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePrompt>>,
+  TError,
+  DeletePromptMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeletePromptMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePrompt>>,
+    DeletePromptMutationVariables
+  > = (props) => {
+    const { promptId } = props ?? {}
+
+    return deletePrompt(promptId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeletePromptMutationResult = NonNullable<Awaited<ReturnType<typeof deletePrompt>>>
+
+export type DeletePromptMutationError = HTTPValidationError
+export type DeletePromptMutationVariables = { promptId: number }
+
+/**
+ * @summary Delete Prompt
+ */
+export const useDeletePrompt = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deletePrompt>>,
+      TError,
+      DeletePromptMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deletePrompt>>,
+  TError,
+  DeletePromptMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeletePromptMutationOptions(options), queryClient)
+}
+
+export const getUpdatePromptUrl = (promptId: number) => {
+  return `/api/prompts/${promptId}`
+}
+
+/**
+ * Change a saved prompt's title and text.
+ * @summary Update Prompt
+ */
+export const updatePrompt = async (
+  promptId: number,
+  promptCreate: PromptCreate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PromptRead> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<PromptRead>(getUpdatePromptUrl(promptId), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(promptCreate),
+  })
+}
+
+export const getUpdatePromptMutationKey = () => ['updatePrompt'] as const
+
+export const getUpdatePromptMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePrompt>>,
+    TError,
+    UpdatePromptMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePrompt>>,
+  TError,
+  UpdatePromptMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdatePromptMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePrompt>>,
+    UpdatePromptMutationVariables
+  > = (props) => {
+    const { promptId, data } = props ?? {}
+
+    return updatePrompt(promptId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdatePromptMutationResult = NonNullable<Awaited<ReturnType<typeof updatePrompt>>>
+export type UpdatePromptMutationBody = PromptCreate
+export type UpdatePromptMutationError = HTTPValidationError
+export type UpdatePromptMutationVariables = { promptId: number; data: PromptCreate }
+
+/**
+ * @summary Update Prompt
+ */
+export const useUpdatePrompt = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updatePrompt>>,
+      TError,
+      UpdatePromptMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updatePrompt>>,
+  TError,
+  UpdatePromptMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdatePromptMutationOptions(options), queryClient)
 }

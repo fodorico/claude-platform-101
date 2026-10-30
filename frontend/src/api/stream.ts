@@ -2,8 +2,13 @@ import type { ExchangeRead, MessageCreate } from './generated/model'
 import { ApiError, readErrorMessage } from './http'
 
 // The generated client can't consume server-sent events, so POST /api/messages/stream is read
-// here. These mirror StreamDelta, StreamTitle and StreamError in backend/app/schemas.py.
+// here. These mirror StreamDelta, StreamThinking, StreamTitle and StreamError in
+// backend/app/schemas.py.
 interface StreamDelta {
+  text: string
+}
+
+interface StreamThinking {
   text: string
 }
 
@@ -35,6 +40,8 @@ function parseEvent(block: string): ServerSentEvent | null {
 interface StreamAnswerOptions {
   /** Called with each piece of the answer, in order. */
   onDelta: (text: string) => void
+  /** Called with each piece of the model's reasoning, when the chat shows it. */
+  onThinking?: (text: string) => void
   /** Called as soon as the exchange is stored, before a possible title arrives. */
   onDone?: (exchange: ExchangeRead) => void
   /** Called when the model titled a new conversation. */
@@ -46,7 +53,7 @@ interface StreamAnswerOptions {
  * ends (for a new conversation, after its title). */
 export async function streamAnswer(
   message: MessageCreate,
-  { onDelta, onDone, onTitle, signal }: StreamAnswerOptions,
+  { onDelta, onThinking, onDone, onTitle, signal }: StreamAnswerOptions,
 ): Promise<ExchangeRead> {
   const response = await fetch('/api/messages/stream', {
     method: 'POST',
@@ -74,6 +81,7 @@ export async function streamAnswer(
       end = buffer.indexOf('\n\n')
 
       if (event?.name === 'delta') onDelta((event.data as StreamDelta).text)
+      else if (event?.name === 'thinking') onThinking?.((event.data as StreamThinking).text)
       else if (event?.name === 'done') {
         exchange = event.data as ExchangeRead
         onDone?.(exchange)

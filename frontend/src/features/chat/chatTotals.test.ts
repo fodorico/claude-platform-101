@@ -15,6 +15,13 @@ const exchange = (model: string, durationMs: number | null): ExchangeRead => ({
   duration_ms: durationMs,
   first_token_ms: null,
   created_at: '2026-10-29T12:00:00Z',
+  thinking: null,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  rating: null,
+  version_group: 1,
+  is_active: true,
+  attachments: [],
 })
 
 describe('chatTotals', () => {
@@ -25,7 +32,15 @@ describe('chatTotals', () => {
       exchange('b', 500),
     ])
 
-    expect(total).toEqual({ messages: 3, inputTokens: 30, outputTokens: 60, durationMs: 1500 })
+    expect(total).toEqual({
+      messages: 3,
+      inputTokens: 30,
+      outputTokens: 60,
+      cacheReadTokens: 0,
+      durationMs: 1500,
+      // No prices given: no estimate.
+      cost: null,
+    })
     expect(byModel.map(([model, usage]) => [model, usage.messages])).toEqual([
       ['b', 2],
       ['a', 1],

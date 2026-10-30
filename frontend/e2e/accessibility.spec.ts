@@ -119,6 +119,39 @@ for (const theme of ['nord', 'dim'] as const) {
       }
     })
 
+    test('reasoning, versions and the studio dialogs have no accessibility violations', async ({
+      page,
+    }) => {
+      await mockApi(page, {
+        history: [
+          { ...exchange(1, 'Explain APIs', 'First take'), is_active: false },
+          {
+            ...exchange(2, 'Explain APIs', 'Second take'),
+            version_group: 1,
+            thinking: 'Recall the basics first.',
+          },
+        ],
+        answer: () => ({ reply: 'ok' }),
+      })
+      await page.goto(CHAT_URL)
+      await page.getByRole('button', { name: 'Reasoning' }).click()
+      await expect(page.getByText('Recall the basics first.')).toBeVisible()
+      await expect(page.getByRole('group', { name: 'Versions' })).toBeVisible()
+      await expectNoViolations(page)
+
+      for (const [button, dialog] of [
+        ['Compare versions', 'Compare versions'],
+        ['Chat settings', 'Chat settings'],
+        ['Prompt library', 'Prompt library'],
+      ] as const) {
+        await page.getByRole('button', { name: button }).click()
+        await expect(page.getByRole('dialog', { name: dialog })).toBeVisible()
+        await expectNoViolations(page)
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+    })
+
     test('error state has no accessibility violations', async ({ page }) => {
       await mockApi(page, { answer: () => ({ error: 'Rate limit reached', status: 429 }) })
       await page.goto('/')

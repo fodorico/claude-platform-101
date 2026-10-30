@@ -3,7 +3,12 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationRead, ExchangeRead, MessageCreate } from '../api/generated/model'
+import type {
+  ConversationRead,
+  ExchangeRead,
+  MessageCreate,
+  PromptRead,
+} from '../api/generated/model'
 import { routes } from '../routes'
 import { sseResponse } from '../test/sse'
 
@@ -21,6 +26,13 @@ function exchange(id: number, conversationId: number, prompt: string): ExchangeR
     duration_ms: 1200,
     first_token_ms: 400,
     created_at: '2026-10-29T12:00:00Z',
+    thinking: null,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    rating: null,
+    version_group: id,
+    is_active: true,
+    attachments: [],
   }
 }
 
@@ -29,6 +41,11 @@ function conversation(id: number, title: string): ConversationRead {
     id,
     title,
     archived_at: null,
+    pinned_at: null,
+    system_prompt: null,
+    temperature: null,
+    max_tokens: null,
+    show_thinking: false,
     created_at: '2026-10-29T12:00:00Z',
     updated_at: '2026-10-29T12:00:00Z',
   }
@@ -49,6 +66,7 @@ const modelSettings = {
   ],
   max_tokens: 16000,
   system_prompt: 'Answer briefly.',
+  prices: [{ model: 'gemini-test', input: 1, output: 10, cache_read: 0.1, cache_write: 0 }],
 }
 
 type StreamOutcome =
@@ -82,6 +100,7 @@ function mockApi(
   outcome: (content: string) => StreamOutcome = () => ({ ok: true }),
 ) {
   const sent: MessageCreate[] = []
+  const prompts: PromptRead[] = []
   let nextId = 100
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/api/model-settings') return Promise.resolve(jsonResponse(modelSettings))
@@ -110,8 +129,15 @@ function mockApi(
     const chatMatch = /^\/api\/conversations\/(\d+)$/.exec(pathname)
     if (chatMatch && init?.method === 'PATCH') {
       const chat = chats.find((item) => item.conversation.id === Number(chatMatch[1]))
-      const body = JSON.parse(init.body as string) as { title?: string; archived?: boolean }
+      const body = JSON.parse(init.body as string) as {
+        title?: string
+        archived?: boolean
+        pinned?: boolean
+      }
       if (chat && body.title) chat.conversation.title = body.title
+      if (chat && body.pinned !== undefined) {
+        chat.conversation.pinned_at = body.pinned ? '2026-10-30T00:00:00Z' : null
+      }
       if (chat && body.archived !== undefined) {
         chat.conversation.archived_at = body.archived ? '2026-10-30T00:00:00Z' : null
       }
@@ -122,6 +148,62 @@ function mockApi(
       return Promise.resolve(
         chat ? jsonResponse(chat.conversation) : jsonResponse({ detail: 'Not found' }, 404),
       )
+    }
+    const exchangeMatch = /^\/api\/exchanges\/(\d+)$/.exec(pathname)
+    if (exchangeMatch) {
+      const id = Number(exchangeMatch[1])
+      const body = JSON.parse(init?.body as string) as { rating?: number; active?: boolean }
+      const all = chats.flatMap((chat) => chat.messages)
+      const target = all.find((item) => item.id === id)
+      if (!target) return Promise.resolve(jsonResponse({ detail: 'Not found' }, 404))
+      if (body.rating !== undefined) target.rating = body.rating || null
+      if (body.active) {
+        for (const item of all) {
+          if (item.version_group === target.version_group) item.is_active = item.id === id
+        }
+      }
+      return Promise.resolve(jsonResponse(target))
+    }
+    const apiCallMatch = /^\/api\/exchanges\/(\d+)\/api-call$/.exec(pathname)
+    if (apiCallMatch) {
+      return Promise.resolve(
+        jsonResponse({
+          provider: 'gemini',
+          request: { model: 'gemini-test', contents: [{ role: 'user', parts: [{ text: 'Hi' }] }] },
+          usage: { prompt_token_count: 12 },
+        }),
+      )
+    }
+    const forkMatch = /^\/api\/conversations\/(\d+)\/fork$/.exec(pathname)
+    if (forkMatch) {
+      const source = chats.find((item) => item.conversation.id === Number(forkMatch[1]))
+      const { exchange_id } = JSON.parse(init?.body as string) as { exchange_id: number }
+      const forked: FakeChat = {
+        conversation: conversation(nextId++, `${source?.conversation.title ?? ''} (fork)`),
+        messages: (source?.messages ?? []).filter((item) => item.id <= exchange_id),
+      }
+      chats.unshift(forked)
+      return Promise.resolve(jsonResponse(forked.conversation, 201))
+    }
+    if (pathname === '/api/messages/count-tokens') {
+      const body = JSON.parse(init?.body as string) as MessageCreate
+      return Promise.resolve(jsonResponse({ input_tokens: body.content.split(' ').length * 10 }))
+    }
+    if (pathname.startsWith('/api/prompts')) {
+      const id = Number(pathname.split('/')[3])
+      if (init?.method === 'POST') {
+        const body = JSON.parse(init.body as string) as { title: string; content: string }
+        prompts.push({ id: nextId++, ...body, created_at: '2026-10-30T00:00:00Z' })
+        return Promise.resolve(jsonResponse(prompts.at(-1), 201))
+      }
+      if (init?.method === 'DELETE') {
+        prompts.splice(
+          prompts.findIndex((item) => item.id === id),
+          1,
+        )
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      return Promise.resolve(jsonResponse(prompts))
     }
     const messagesMatch = /^\/api\/conversations\/(\d+)\/messages$/.exec(url)
     if (messagesMatch) {
@@ -147,12 +229,27 @@ function mockApi(
     const isNew = !chat
     if (!chat) {
       chat = { conversation: conversation(nextId++, body.content), messages: [] }
+      chat.conversation.show_thinking = body.settings?.show_thinking ?? false
       chats.unshift(chat)
     }
     const stored = exchange(nextId++, chat.conversation.id, body.content)
-    chat.messages = chat.messages.filter((item) => item.id !== body.replaces_id)
+    const showThinking = body.settings?.show_thinking ?? chat.conversation.show_thinking
+    if (showThinking) stored.thinking = 'Thinking hard'
+    stored.attachments = (body.images ?? []).map((_, index) => ({
+      id: 500 + index,
+      media_type: 'image/png',
+    }))
+    // A regenerated or edited message becomes a new active version of the replaced one.
+    const replaced = chat.messages.find((item) => item.id === body.replaces_id)
+    if (replaced) {
+      stored.version_group = replaced.version_group
+      for (const item of chat.messages) {
+        if (item.version_group === replaced.version_group) item.is_active = false
+      }
+    }
     chat.messages.push(stored)
     const events: [string, unknown][] = [
+      ...(showThinking ? [['thinking', { text: 'Thinking hard' }] as [string, unknown]] : []),
       ['delta', { text: 'Reply to ' }],
       ['delta', { text: body.content }],
       ['done', stored],
@@ -167,15 +264,19 @@ function mockApi(
   return sent
 }
 
-function renderApp(initialEntry = '/') {
+function renderAppWithContainer(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createMemoryRouter(routes, { initialEntries: [initialEntry] })
-  render(
+  const { container } = render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
-  return router
+  return { router, container }
+}
+
+function renderApp(initialEntry = '/') {
+  return renderAppWithContainer(initialEntry).router
 }
 
 const mcpChat = (): FakeChat => ({
@@ -226,6 +327,14 @@ describe('ChatPage', () => {
         provider: 'gemini',
         model: 'gemini-other',
         replaces_id: null,
+        images: [],
+        // A new chat is created with its settings.
+        settings: {
+          system_prompt: null,
+          temperature: null,
+          max_tokens: null,
+          show_thinking: false,
+        },
       },
       {
         content: 'Again',
@@ -233,6 +342,8 @@ describe('ChatPage', () => {
         provider: 'gemini',
         model: 'gemini-other',
         replaces_id: null,
+        images: [],
+        settings: null,
       },
     ])
     expect(JSON.parse(localStorage.getItem('model') ?? '{}')).toEqual({
@@ -511,7 +622,7 @@ describe('ChatPage', () => {
 
     const details = await screen.findByRole('complementary', { name: 'Request details' })
     const totals = await within(details).findByRole('region', { name: 'This chat' })
-    expect(within(totals).getByText('Messages', { selector: 'dt' }).nextSibling).toHaveTextContent(
+    expect(within(totals).getByText('Answers', { selector: 'dt' }).nextSibling).toHaveTextContent(
       '2',
     )
     expect(
@@ -597,6 +708,217 @@ describe('ChatPage', () => {
       expect(within(dialog).getByText('Search chats')).toBeInTheDocument()
       await user.keyboard('{Escape}')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('studio features', () => {
+    const versionedChat = (): FakeChat => {
+      const chat = mcpChat()
+      const [, second] = chat.messages
+      if (second) second.is_active = false
+      chat.messages.push({
+        ...exchange(3, 1, 'And tools?'),
+        reply: 'Second take',
+        version_group: 2,
+      })
+      return chat
+    }
+
+    it('switches between versions of the last answer and compares them', async () => {
+      const user = userEvent.setup()
+      mockApi([versionedChat()])
+      renderApp('/?chat=1')
+
+      expect(await screen.findByText('Second take')).toBeInTheDocument()
+      const versions = screen.getByRole('group', { name: 'Versions' })
+      expect(versions).toHaveTextContent('2 / 2')
+
+      await user.click(within(versions).getByRole('button', { name: 'Previous version' }))
+      expect(await screen.findByText('Reply to And tools?')).toBeInTheDocument()
+      expect(screen.queryByText('Second take')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Compare versions' }))
+      const dialog = screen.getByRole('dialog', { name: 'Compare versions' })
+      expect(within(dialog).getAllByRole('article')).toHaveLength(2)
+      expect(within(dialog).getByText('Second take')).toBeInTheDocument()
+    })
+
+    it('regenerates the last answer with another model', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi([mcpChat()])
+      renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      await user.click(screen.getByRole('button', { name: 'Try another model' }))
+      await user.click(
+        within(screen.getByRole('list', { name: 'Models' })).getByRole('button', { name: 'Other' }),
+      )
+
+      await waitFor(() => {
+        expect(sent).toEqual([
+          expect.objectContaining({ model: 'gemini-other', replaces_id: 2, conversation_id: 1 }),
+        ])
+      })
+      expect(await screen.findByRole('group', { name: 'Versions' })).toHaveTextContent('2 / 2')
+    })
+
+    it('starts a chat with custom settings and shows the reasoning', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi()
+      renderApp()
+
+      await user.click(await screen.findByRole('button', { name: 'Chat settings' }))
+      const dialog = screen.getByRole('dialog', { name: 'Chat settings' })
+      await user.type(within(dialog).getByLabelText('System prompt'), 'Be a pirate.')
+      await user.click(within(dialog).getByLabelText(/Show reasoning/))
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+      expect(screen.getByRole('button', { name: 'Chat settings (customized)' })).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Message'), 'Hi{Enter}')
+
+      expect(await screen.findByText('Reply to Hi')).toBeInTheDocument()
+      expect(sent[0]?.settings).toEqual({
+        system_prompt: 'Be a pirate.',
+        temperature: null,
+        max_tokens: null,
+        show_thinking: true,
+      })
+      await user.click(screen.getByRole('button', { name: 'Reasoning' }))
+      expect(screen.getByText('Thinking hard')).toBeInTheDocument()
+    })
+
+    it('rates an answer', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      const [, good] = screen.getAllByRole('button', { name: 'Good answer' })
+      if (good) await user.click(good)
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('button', { name: 'Good answer' })[1]).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        )
+      })
+    })
+
+    it('forks the chat from an answer', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      const router = renderApp('/?chat=1')
+      await screen.findByText('Reply to And tools?')
+
+      const [first] = screen.getAllByRole('button', { name: 'Fork chat from here' })
+      if (first) await user.click(first)
+
+      await waitFor(() => {
+        expect(router.state.location.search).toBe('?chat=100')
+      })
+      expect(await screen.findByRole('heading', { name: 'About MCP (fork)' })).toBeInTheDocument()
+      expect(screen.queryByText('And tools?')).not.toBeInTheDocument()
+    })
+
+    it('pins a chat to the top of the history', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat(), { conversation: conversation(2, 'Prompt tips'), messages: [] }])
+      renderApp()
+      await user.click(await screen.findByRole('button', { name: 'History' }))
+      const history = screen.getByRole('complementary', { name: 'History' })
+
+      await user.click(
+        await within(history).findByRole('button', { name: 'Options for Prompt tips' }),
+      )
+      await user.click(within(history).getByRole('button', { name: 'Pin' }))
+
+      const pinned = await within(history).findByRole('region', { name: 'Pinned' })
+      expect(
+        within(pinned).getByRole('button', { name: /^Pinned:\s*Prompt tips$/ }),
+      ).toBeInTheDocument()
+    })
+
+    it('saves a prompt and inserts it into the message box', async () => {
+      const user = userEvent.setup()
+      mockApi()
+      renderApp()
+
+      await user.click(await screen.findByRole('button', { name: 'Prompt library' }))
+      const dialog = screen.getByRole('dialog', { name: 'Prompt library' })
+      await user.click(within(dialog).getByRole('button', { name: 'New prompt' }))
+      await user.type(within(dialog).getByLabelText('Title'), 'Summarize')
+      await user.type(within(dialog).getByLabelText('Prompt'), 'Summarize this text:')
+      await user.click(within(dialog).getByRole('button', { name: 'Save prompt' }))
+
+      await user.click(await within(dialog).findByRole('button', { name: /^Summarize/ }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Message')).toHaveValue('Summarize this text:')
+    })
+
+    it('sends attached images and shows them in the chat', async () => {
+      const user = userEvent.setup()
+      const sent = mockApi()
+      const { container } = renderAppWithContainer()
+      const input = container.querySelector<HTMLInputElement>('input[type=file]')
+      if (!input) throw new Error('No file input')
+
+      await user.upload(input, new File(['png'], 'cat.png', { type: 'image/png' }))
+      expect(await screen.findByRole('img', { name: 'cat.png' })).toBeInTheDocument()
+      await user.type(screen.getByLabelText('Message'), 'What is this?{Enter}')
+
+      expect(await screen.findByText('Reply to What is this?')).toBeInTheDocument()
+      expect(sent[0]?.images).toEqual([{ media_type: 'image/png', data: 'cG5n' }])
+      expect(screen.getByRole('img', { name: 'Attached image 1' })).toHaveAttribute(
+        'src',
+        '/api/attachments/500',
+      )
+    })
+
+    it('rejects images it cannot send', async () => {
+      const user = userEvent.setup({ applyAccept: false })
+      mockApi()
+      const { container } = renderAppWithContainer()
+      const input = container.querySelector<HTMLInputElement>('input[type=file]')
+      if (!input) throw new Error('No file input')
+
+      await user.upload(input, new File(['x'], 'doc.pdf', { type: 'application/pdf' }))
+
+      expect(await screen.findByText('Use PNG, JPEG, GIF or WebP images.')).toBeInTheDocument()
+    })
+
+    it('counts the input tokens while writing', async () => {
+      const user = userEvent.setup()
+      mockApi()
+      renderApp()
+
+      await user.type(await screen.findByLabelText('Message'), 'Hello there')
+
+      expect(
+        await screen.findByText('≈ 20 input tokens', undefined, { timeout: 3000 }),
+      ).toBeInTheDocument()
+    })
+
+    it('shows the estimated cost and the API call of an answer', async () => {
+      const user = userEvent.setup()
+      mockApi([mcpChat()])
+      localStorage.setItem('panels', JSON.stringify({ history: false, details: true }))
+      renderApp('/?chat=1')
+
+      const details = await screen.findByRole('complementary', { name: 'Request details' })
+      const answer = within(details).getByRole('region', { name: 'Answer' })
+      // 12 input tokens at $1/M + 34 output tokens at $10/M.
+      expect(await within(answer).findByText('$0.0004')).toBeInTheDocument()
+
+      await user.click(within(details).getByRole('button', { name: 'View API call' }))
+
+      const dialog = screen.getByRole('dialog', { name: 'API call' })
+      expect(await within(dialog).findByRole('region', { name: 'Request' })).toHaveTextContent(
+        '"model": "gemini-test"',
+      )
+      expect(within(dialog).getByRole('region', { name: 'Usage' })).toHaveTextContent(
+        '"prompt_token_count": 12',
+      )
     })
   })
 

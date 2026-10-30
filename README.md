@@ -26,6 +26,10 @@ docker compose up --build
 
 Open http://localhost:8080. Migrations run automatically when the API starts.
 
+Open pages check `/version.json` (written by each build) every few seconds and reload
+themselves after `docker compose up -d --build`; if you are typing, an answer is being written or
+a dialog is open, they offer a Reload button instead. In development, Vite reloads on its own.
+
 ## Local development
 
 Requirements: `uv`, Node 26, Docker.
@@ -63,19 +67,29 @@ Git hooks: `cd backend && uv run pre-commit install`.
 ## API
 
 - `POST /api/messages`: send a message and get the stored exchange in one response. Body:
-  `content`, plus optional `conversation_id` (none starts a new chat), `provider` and `model`.
-  Earlier messages of the conversation are sent as context. `replaces_id` (the chat's last
-  exchange) regenerates or edits it: the new answer replaces it only once it succeeds.
-- `POST /api/messages/stream`: same, streamed as server-sent events (`delta`, then `done`, then
-  `title` for a new chat; or `error`). The UI uses this one.
+  `content`, plus optional `conversation_id` (none starts a new chat), `provider`, `model`,
+  `images` (up to 4 base64 PNG/JPEG/GIF/WebP, 3 MB each) and `settings` (see below). The chat's
+  active earlier messages are sent as context. `replaces_id` (an exchange of the chat's last
+  turn) regenerates or edits it: the new answer becomes a new active version of that turn, and
+  earlier versions are kept.
+- `POST /api/messages/stream`: same, streamed as server-sent events (`thinking` when reasoning is
+  shown, `delta`, then `done`, then `title` for a new chat; or `error`). The UI uses this one.
+- `POST /api/messages/count-tokens`: the input tokens a message would use, counted by the
+  provider (same body as above).
 - `GET /api/conversations`: chats, latest activity first; `q` searches titles and messages (any
   case). `GET /api/conversations/{id}`: one chat. `GET /api/conversations/{id}/messages`: a chat's
   exchanges, oldest first.
-- `PATCH /api/conversations/{id}` (rename with `title`, archive with `archived`),
+- `PATCH /api/conversations/{id}` (rename with `title`, archive with `archived`, pin with
+  `pinned`, and `settings`: `system_prompt`, `temperature`, `max_tokens`, `show_thinking`),
+  `POST /api/conversations/{id}/fork` (a new chat with the active messages up to `exchange_id`),
   `DELETE /api/conversations/{id}`, and `POST /api/conversations/bulk` (`ids` + `action`:
   `archive`, `unarchive` or `delete`). `GET /api/conversations?archived=true` lists archived chats.
+- `PATCH /api/exchanges/{id}`: rate an answer (`rating` -1, 0 or 1) or make a version the
+  active one (`active: true`). `GET /api/exchanges/{id}/api-call`: the request sent to the
+  provider and the usage it reported. `GET /api/attachments/{id}`: an attached image.
+- `GET/POST /api/prompts`, `PUT/DELETE /api/prompts/{id}`: the saved prompt library.
 - `GET /api/model-settings`: providers (and whether they have an API key), their models, max
-  tokens and system prompt. Interactive docs at `/docs`.
+  tokens, system prompt and prices. Interactive docs at `/docs`.
 
 ## Changing the API
 
@@ -102,4 +116,5 @@ Backend settings are environment variables (see `backend/app/config.py`):
 | `MAX_TOKENS` | `16000` | Maximum answer length, both providers |
 | `TIMEOUT_SECONDS` | `60` | |
 | `SYSTEM_PROMPT` | Brief, simple answers | |
+| `MODEL_PRICES` | Current list prices | JSON list of `{model, input, output, cache_read, cache_write}` in USD per million tokens; `model` matches model ids by prefix. Used for cost estimates only |
 | `CORS_ORIGINS` | `["http://localhost:5173"]` | JSON list |

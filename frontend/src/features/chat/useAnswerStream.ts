@@ -16,6 +16,10 @@ interface AnswerStreamState {
   replacesId: number | null
   /** The answer received so far. */
   reply: string
+  /** The model's reasoning received so far, when the chat shows it. */
+  thinking: string
+  /** Data URLs of the images sent with the message, to show them meanwhile. */
+  images: string[]
   isStreaming: boolean
   /** The user stopped the answer: what arrived stays on screen but was not saved. */
   stopped: boolean
@@ -27,6 +31,8 @@ const idle: AnswerStreamState = {
   conversationId: null,
   replacesId: null,
   reply: '',
+  thinking: '',
+  images: [],
   isStreaming: false,
   stopped: false,
   error: null,
@@ -59,6 +65,9 @@ export function useAnswerStream() {
         prompt: message.content,
         conversationId: message.conversation_id ?? null,
         replacesId: message.replaces_id ?? null,
+        images: (message.images ?? []).map(
+          (image) => `data:${image.media_type};base64,${image.data}`,
+        ),
         isStreaming: true,
       })
 
@@ -68,12 +77,20 @@ export function useAnswerStream() {
           onDelta: (text) => {
             setState((current) => ({ ...current, reply: current.reply + text }))
           },
+          onThinking: (text) => {
+            setState((current) => ({ ...current, thinking: current.thinking + text }))
+          },
           onDone: (exchange) => {
-            // The stored exchange takes the place of the streamed one without refetching.
+            // The stored exchange takes the place of the streamed one without refetching; a new
+            // version of a message makes the earlier versions inactive.
             queryClient.setQueryData<ExchangeRead[]>(
               getListConversationMessagesQueryKey(exchange.conversation_id),
               (messages) => [
-                ...(messages ?? []).filter((item) => item.id !== message.replaces_id),
+                ...(messages ?? []).map((item) =>
+                  item.version_group === exchange.version_group
+                    ? { ...item, is_active: false }
+                    : item,
+                ),
                 exchange,
               ],
             )

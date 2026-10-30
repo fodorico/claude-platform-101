@@ -26,6 +26,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-}
       GEMINI_MODELS: ${GEMINI_MODELS:-}
+      MODEL_PRICES: ${MODEL_PRICES:-}
     depends_on:
       db:
         condition: service_healthy

@@ -9,8 +9,17 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import get_session, get_session_factory
-from app.schemas import ExchangeRead, MessageCreate, StreamDelta, StreamError, StreamTitle
+from app.schemas import (
+    ExchangeRead,
+    MessageCreate,
+    StreamDelta,
+    StreamError,
+    StreamThinking,
+    StreamTitle,
+    TokenCount,
+)
 from app.services.chat import (
+    Context,
     ConversationNotFoundError,
     NotLastExchangeError,
     context_for,
@@ -25,7 +34,7 @@ from app.services.llm import (
     LLMReply,
     LLMSelectionError,
     LLMService,
-    Turn,
+    ThinkingDelta,
     get_llm_registry,
 )
 
@@ -52,11 +61,18 @@ def _elapsed_ms(start: float) -> int:
 
 async def _prepare(
     body: MessageCreate, session: AsyncSession, registry: LLMRegistry
-) -> tuple[str, str, LLMService, list[Turn]]:
+) -> tuple[str, str, LLMService, Context]:
     """Validate the request before calling the model: provider, model and conversation."""
     try:
         provider, model, llm = registry.resolve(body.provider, body.model)
-        turns = await context_for(session, body.conversation_id, body.content, body.replaces_id)
+        context = await context_for(
+            session,
+            body.conversation_id,
+            body.content,
+            replaces_id=body.replaces_id,
+            images=body.images,
+            settings=body.settings,
+        )
     except NotLastExchangeError as exc:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -66,7 +82,7 @@ async def _prepare(
         raise HTTPException(_http_status(exc), str(exc)) from exc
     except ConversationNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found") from exc
-    return provider, model, llm, turns
+    return provider, model, llm, context
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -75,10 +91,10 @@ async def send_message(
 ) -> ExchangeRead:
     """Send a message to the chosen model, store the exchange and return it. A message
     without a conversation starts one, and the model then writes its title."""
-    provider, model, llm, turns = await _prepare(body, session, registry)
+    provider, model, llm, context = await _prepare(body, session, registry)
     start = time.perf_counter()
     try:
-        reply = await llm.ask(turns, model=model)
+        reply = await llm.ask(context.turns, model=model, options=context.options)
     except LLMError as exc:
         raise HTTPException(_http_status(exc), str(exc)) from exc
     exchange = await store_exchange(
@@ -87,8 +103,10 @@ async def send_message(
         body.content,
         provider,
         reply,
+        context=context,
         duration_ms=_elapsed_ms(start),
         replaces_id=body.replaces_id,
+        settings=body.settings,
     )
     if body.conversation_id is None:
         await write_title(session, exchange.conversation_id, body.content, llm, model)
@@ -105,7 +123,9 @@ def _sse(event: str, payload: BaseModel) -> str:
     responses={
         200: {
             "description": (
-                "Server-sent events: `delta` (StreamDelta) for each piece of the answer, then "
+                "Server-sent events: `thinking` (StreamThinking) for each piece of the model's "
+                "reasoning when the chat shows it, `delta` (StreamDelta) for each piece of the "
+                "answer, then "
                 "`done` (ExchangeRead) once it is stored, then — for a new conversation — "
                 "`title` (StreamTitle); or `error` (StreamError)."
             ),
@@ -121,13 +141,16 @@ async def stream_message(
 ) -> StreamingResponse:
     """Send a message and stream the answer as it is generated; the exchange is stored at the
     end. Nothing is stored if the answer fails, even after part of it was streamed."""
-    provider, model, llm, turns = await _prepare(body, session, registry)
+    provider, model, llm, context = await _prepare(body, session, registry)
 
     async def events() -> AsyncIterator[str]:
         start = time.perf_counter()
         first_token_ms: int | None = None
         try:
-            async for item in llm.stream(turns, model=model):
+            async for item in llm.stream(context.turns, model=model, options=context.options):
+                if isinstance(item, ThinkingDelta):
+                    yield _sse("thinking", StreamThinking(text=item.text))
+                    continue
                 if not isinstance(item, LLMReply):
                     if first_token_ms is None:
                         first_token_ms = _elapsed_ms(start)
@@ -142,9 +165,11 @@ async def stream_message(
                         body.content,
                         provider,
                         item,
+                        context=context,
                         duration_ms=duration_ms,
                         first_token_ms=first_token_ms,
                         replaces_id=body.replaces_id,
+                        settings=body.settings,
                     )
                     yield _sse("done", exchange)
                     if body.conversation_id is None:
@@ -173,3 +198,17 @@ async def stream_message(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/count-tokens")
+async def count_message_tokens(
+    body: MessageCreate, session: SessionDep, registry: RegistryDep
+) -> TokenCount:
+    """Count the input tokens the message would use with its conversation's context, without
+    sending it. Gemini counts the messages only, not the system prompt."""
+    _, model, llm, context = await _prepare(body, session, registry)
+    try:
+        tokens = await llm.count_tokens(context.turns, model=model, options=context.options)
+    except LLMError as exc:
+        raise HTTPException(_http_status(exc), str(exc)) from exc
+    return TokenCount(input_tokens=tokens)

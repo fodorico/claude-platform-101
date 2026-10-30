@@ -1,10 +1,18 @@
 """Provider-neutral contract for the language models behind the API (Claude and Gemini)."""
 
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Literal, Protocol
 
 from fastapi import Request
+
+
+@dataclass(frozen=True)
+class Image:
+    """An image attached to a user message."""
+
+    media_type: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -13,6 +21,19 @@ class Turn:
 
     role: Literal["user", "assistant"]
     text: str
+    images: tuple[Image, ...] = ()
+
+
+@dataclass(frozen=True)
+class GenerationOptions:
+    """Per-request settings; None means the configured default."""
+
+    system: str | None = None
+    max_tokens: int | None = None
+    # Only Gemini accepts it: current Claude models reject sampling parameters.
+    temperature: float | None = None
+    # Return the model's reasoning (a summary of it) along with the answer.
+    show_thinking: bool = False
 
 
 @dataclass(frozen=True)
@@ -22,10 +43,25 @@ class LLMReply:
     stop_reason: str
     input_tokens: int
     output_tokens: int
+    thinking: str = ""
+    # Prompt caching: input tokens read from / written to the provider's cache.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    # The request as sent (without the messages) and the usage as returned, for inspection.
+    request: dict[str, Any] = field(default_factory=dict)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
-# A stream yields text deltas (str) as they arrive and ends with the complete LLMReply.
-StreamItem = str | LLMReply
+@dataclass(frozen=True)
+class ThinkingDelta:
+    """A piece of the model's reasoning, streamed before (or between) pieces of the answer."""
+
+    text: str
+
+
+# A stream yields text deltas (str) and reasoning (ThinkingDelta) as they arrive, and ends with
+# the complete LLMReply.
+StreamItem = str | ThinkingDelta | LLMReply
 
 
 class LLMError(Exception):
@@ -54,17 +90,32 @@ class LLMService(Protocol):
         messages: Sequence[Turn],
         *,
         model: str,
-        system: str | None = None,
-        max_tokens: int | None = None,
+        options: GenerationOptions | None = None,
     ) -> LLMReply:
-        """Answer in one go; `system` and `max_tokens` override the configured ones."""
+        """Answer in one go."""
         ...
 
-    def stream(self, messages: Sequence[Turn], *, model: str) -> AsyncIterator[StreamItem]:
-        """Yield the answer's text as it is generated, then the final LLMReply.
+    def stream(
+        self,
+        messages: Sequence[Turn],
+        *,
+        model: str,
+        options: GenerationOptions | None = None,
+    ) -> AsyncIterator[StreamItem]:
+        """Yield the answer's text (and reasoning) as it is generated, then the final LLMReply.
 
         Raises LLMError subclasses, possibly after some text was already yielded.
         """
+        ...
+
+    async def count_tokens(
+        self,
+        messages: Sequence[Turn],
+        *,
+        model: str,
+        options: GenerationOptions | None = None,
+    ) -> int:
+        """How many input tokens the request would use, without generating an answer."""
         ...
 
 

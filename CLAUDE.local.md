@@ -9,6 +9,9 @@ step by step (Building with the Claude API, then MCP).
 - UI copy is in **English**.
 - Read `docs/status.md` at the start of a session.
 - Before finishing a change, run all checks (see README "Checks"); backend tests need Docker.
+- After finishing a change, if the Docker stack is running, rebuild it
+  (`docker compose up -d --build`): open pages notice the new version and reload themselves, so
+  the user never has to refresh.
 - Any backend API change: regenerate the client (`cd frontend && npm run api:generate`) and
   commit it together with the backend change.
 - Database changes always go through an Alembic migration.

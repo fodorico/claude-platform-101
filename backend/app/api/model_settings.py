@@ -28,4 +28,5 @@ async def get_model_settings(
         ],
         max_tokens=settings.max_tokens,
         system_prompt=settings.system_prompt,
+        prices=settings.model_prices,
     )
