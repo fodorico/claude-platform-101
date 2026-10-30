@@ -65,3 +65,22 @@
   auto-detection to keep it cheap) and colored from the daisyUI theme variables, so both themes
   pass axe contrast checks. History search is a case-insensitive `ILIKE` over titles and
   messages, fine at this size; a full-text index can come later.
+- **2026-10-30 — Chat studio.**
+  - *Versions instead of replacing.* Regenerating or editing no longer deletes the old answer:
+    exchanges carry `version_of` (the first exchange of the turn) and `is_active`. Only active
+    exchanges are sent as context and exported. Switching versions is limited to the last turn so
+    later messages never refer to an inactive answer.
+  - *Images in the database.* Attachments are `bytea` rows (up to 4 × 3 MB per message), simple
+    and transactional at this size; object storage can come later. nginx allows 20 MB bodies.
+    Regenerating a turn reuses its images.
+  - *Settings per chat.* System prompt, temperature, max tokens and reasoning are stored on the
+    conversation; empty means the server default. Current Claude models reject sampling
+    parameters, so temperature only applies to Gemini.
+  - *Reasoning.* Claude uses adaptive thinking with summarized display. Gemini needs
+    `include_thoughts` plus `thinking_budget=-1`: Flash-Lite doesn't think otherwise.
+  - *Caching and cost.* Claude requests use automatic prompt caching (top-level `cache_control`);
+    cache reads and writes are stored per exchange. Costs are estimates from the `MODEL_PRICES`
+    list (prefix match), shown as "estimated" and meaningful only on a paid tier.
+  - *API call inspector.* Each exchange stores the request parameters and the provider's raw
+    usage (`api_call`, JSONB); the messages are rebuilt from the stored context ids, with image
+    bytes replaced by their size.
