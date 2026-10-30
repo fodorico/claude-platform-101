@@ -69,7 +69,7 @@ export const getListConversationsUrl = (params?: ListConversationsParams) => {
 
 /**
  * Return the active (or, with `archived=true`, the archived) conversations, most recent
- * activity first.
+ * activity first. `q` keeps those whose title or messages contain it (any case).
  * @summary List Conversations
  */
 export const listConversations = async (
@@ -379,6 +379,131 @@ export const useDeleteConversation = <TError = HTTPValidationError, TContext = u
   TContext
 > => {
   return useMutation(getDeleteConversationMutationOptions(options), queryClient)
+}
+
+export const getGetConversationUrl = (conversationId: number) => {
+  return `/api/conversations/${conversationId}`
+}
+
+/**
+ * Return one conversation, active or archived.
+ * @summary Get Conversation
+ */
+export const getConversation = async (
+  conversationId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationRead> => {
+  return apiFetch<ConversationRead>(getGetConversationUrl(conversationId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetConversationQueryKey = (conversationId: number) => {
+  return [`/api/conversations/${conversationId}`] as const
+}
+
+export const getGetConversationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getConversation>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetConversationQueryKey(conversationId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConversation>>> = ({ signal }) =>
+    getConversation(conversationId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: conversationId !== null && conversationId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getConversation>>>
+export type GetConversationQueryError = HTTPValidationError
+
+export function useGetConversation<
+  TData = Awaited<ReturnType<typeof getConversation>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getConversation>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConversation<
+  TData = Awaited<ReturnType<typeof getConversation>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getConversation>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConversation<
+  TData = Awaited<ReturnType<typeof getConversation>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Conversation
+ */
+
+export function useGetConversation<
+  TData = Awaited<ReturnType<typeof getConversation>>,
+  TError = HTTPValidationError,
+>(
+  conversationId: number,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetConversationQueryOptions(conversationId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }
 
 export const getUpdateConversationUrl = (conversationId: number) => {

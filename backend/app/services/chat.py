@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Conversation, Exchange
@@ -26,19 +26,34 @@ class ConversationNotFoundError(Exception):
     pass
 
 
+class NotLastExchangeError(Exception):
+    """Only a conversation's last exchange can be regenerated or edited."""
+
+
 async def context_for(
-    session: AsyncSession, conversation_id: int | None, content: str
+    session: AsyncSession,
+    conversation_id: int | None,
+    content: str,
+    replaces_id: int | None = None,
 ) -> list[Turn]:
-    """The turns to send: the conversation's latest exchanges, then the new message."""
+    """The turns to send: the conversation's latest exchanges (those before `replaces_id`, when
+    replacing the last one), then the new message."""
     turns: list[Turn] = []
+    if replaces_id is not None and conversation_id is None:
+        raise NotLastExchangeError
     if conversation_id is not None:
         if await session.get(Conversation, conversation_id) is None:
             raise ConversationNotFoundError
+        in_conversation = select(Exchange).where(Exchange.conversation_id == conversation_id)
+        if replaces_id is not None:
+            last_id = await session.scalar(
+                select(func.max(Exchange.id)).where(Exchange.conversation_id == conversation_id)
+            )
+            if last_id != replaces_id:
+                raise NotLastExchangeError
+            in_conversation = in_conversation.where(Exchange.id < replaces_id)
         latest = await session.scalars(
-            select(Exchange)
-            .where(Exchange.conversation_id == conversation_id)
-            .order_by(Exchange.id.desc())
-            .limit(MAX_CONTEXT_EXCHANGES)
+            in_conversation.order_by(Exchange.id.desc()).limit(MAX_CONTEXT_EXCHANGES)
         )
         for exchange in reversed(latest.all()):
             turns += [Turn("user", exchange.prompt), Turn("assistant", exchange.reply)]
@@ -62,8 +77,10 @@ async def store_exchange(
     *,
     duration_ms: int,
     first_token_ms: int | None = None,
+    replaces_id: int | None = None,
 ) -> ExchangeRead:
-    """Store the exchange, creating its conversation when it is the first message."""
+    """Store the exchange, creating its conversation when it is the first message, and
+    dropping the exchange it replaces."""
     if conversation_id is None:
         conversation = Conversation(title=fallback_title(prompt))
         session.add(conversation)
@@ -73,6 +90,9 @@ async def store_exchange(
         conversation.updated_at = func.now()
         # Writing in an archived chat brings it back to the main list.
         conversation.archived_at = None
+
+    if replaces_id is not None:
+        await session.execute(delete(Exchange).where(Exchange.id == replaces_id))
 
     exchange = Exchange(
         conversation_id=conversation.id,
