@@ -83,7 +83,7 @@ test('sends to the model picked in the header', async ({ page }) => {
   await page.goto('/')
   const picker = page.getByLabel('Model')
   await expect(picker).toHaveValue('gemini:gemini-flash-lite-latest')
-  await expect(picker.getByRole('option', { name: 'claude-opus-5-5' })).toBeDisabled()
+  await expect(picker.getByRole('option', { name: 'Opus 5.5' })).toBeDisabled()
 
   await picker.selectOption('gemini:gemini-flash-latest')
   const request = page.waitForRequest('**/api/messages/stream')

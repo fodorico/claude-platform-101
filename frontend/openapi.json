@@ -271,6 +271,17 @@
               }
             ],
             "title": "Provider"
+          },
+          "replaces_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Id"
           }
         },
         "required": [
@@ -387,7 +398,7 @@
   "paths": {
     "/api/conversations": {
       "get": {
-        "description": "Return the active (or, with `archived=true`, the archived) conversations, most recent\nactivity first.",
+        "description": "Return the active (or, with `archived=true`, the archived) conversations, most recent\nactivity first. `q` keeps those whose title or messages contain it (any case).",
         "operationId": "list_conversations",
         "parameters": [
           {
@@ -410,6 +421,24 @@
               "default": false,
               "title": "Archived",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           }
         ],
@@ -518,6 +547,47 @@
           }
         },
         "summary": "Delete Conversation",
+        "tags": [
+          "conversations"
+        ]
+      },
+      "get": {
+        "description": "Return one conversation, active or archived.",
+        "operationId": "get_conversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation",
         "tags": [
           "conversations"
         ]

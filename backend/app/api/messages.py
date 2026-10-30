@@ -12,6 +12,7 @@ from app.db import get_session, get_session_factory
 from app.schemas import ExchangeRead, MessageCreate, StreamDelta, StreamError, StreamTitle
 from app.services.chat import (
     ConversationNotFoundError,
+    NotLastExchangeError,
     context_for,
     store_exchange,
     write_title,
@@ -55,7 +56,12 @@ async def _prepare(
     """Validate the request before calling the model: provider, model and conversation."""
     try:
         provider, model, llm = registry.resolve(body.provider, body.model)
-        turns = await context_for(session, body.conversation_id, body.content)
+        turns = await context_for(session, body.conversation_id, body.content, body.replaces_id)
+    except NotLastExchangeError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Only the last message of a conversation can be regenerated or edited",
+        ) from exc
     except LLMSelectionError as exc:
         raise HTTPException(_http_status(exc), str(exc)) from exc
     except ConversationNotFoundError as exc:
@@ -76,7 +82,13 @@ async def send_message(
     except LLMError as exc:
         raise HTTPException(_http_status(exc), str(exc)) from exc
     exchange = await store_exchange(
-        session, body.conversation_id, body.content, provider, reply, duration_ms=_elapsed_ms(start)
+        session,
+        body.conversation_id,
+        body.content,
+        provider,
+        reply,
+        duration_ms=_elapsed_ms(start),
+        replaces_id=body.replaces_id,
     )
     if body.conversation_id is None:
         await write_title(session, exchange.conversation_id, body.content, llm, model)
@@ -132,6 +144,7 @@ async def stream_message(
                         item,
                         duration_ms=duration_ms,
                         first_token_ms=first_token_ms,
+                        replaces_id=body.replaces_id,
                     )
                     yield _sse("done", exchange)
                     if body.conversation_id is None:

@@ -12,4 +12,5 @@ export type ListConversationsParams = {
    */
   limit?: number
   archived?: boolean
+  q?: string | null
 }

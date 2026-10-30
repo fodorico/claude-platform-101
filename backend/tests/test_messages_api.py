@@ -152,3 +152,71 @@ async def test_health_checks_database(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+async def test_regenerate_replaces_the_last_exchange_with_its_earlier_context(
+    client: AsyncClient, fake_llm: FakeLLMService
+) -> None:
+    first = (await client.post("/api/messages", json={"content": "Hola"})).json()
+    conversation_id = first["conversation_id"]
+    last = (
+        await client.post(
+            "/api/messages", json={"content": "Y?", "conversation_id": conversation_id}
+        )
+    ).json()
+
+    response = await client.post(
+        "/api/messages",
+        json={
+            "content": "Y entonces?",
+            "conversation_id": conversation_id,
+            "replaces_id": last["id"],
+        },
+    )
+
+    assert response.status_code == 201
+    turns, _ = fake_llm.requests[-1]
+    assert turns == [
+        Turn("user", "Hola"),
+        Turn("assistant", "Reply to: Hola"),
+        Turn("user", "Y entonces?"),
+    ]
+    messages = (await client.get(f"/api/conversations/{conversation_id}/messages")).json()
+    assert [item["prompt"] for item in messages] == ["Hola", "Y entonces?"]
+
+
+async def test_only_the_last_exchange_can_be_replaced(
+    client: AsyncClient, fake_llm: FakeLLMService
+) -> None:
+    first = (await client.post("/api/messages", json={"content": "Hola"})).json()
+    conversation_id = first["conversation_id"]
+    await client.post("/api/messages", json={"content": "Y?", "conversation_id": conversation_id})
+    requests_before = len(fake_llm.requests)
+
+    response = await client.post(
+        "/api/messages",
+        json={"content": "x", "conversation_id": conversation_id, "replaces_id": first["id"]},
+    )
+
+    assert response.status_code == 422
+    assert len(fake_llm.requests) == requests_before
+
+
+async def test_failed_replacement_keeps_the_original_exchange(
+    client: AsyncClient, fake_llm: FakeLLMService
+) -> None:
+    first = (await client.post("/api/messages", json={"content": "Hola"})).json()
+    fake_llm.error = LLMUnavailableError("down")
+
+    response = await client.post(
+        "/api/messages",
+        json={
+            "content": "Hola",
+            "conversation_id": first["conversation_id"],
+            "replaces_id": first["id"],
+        },
+    )
+
+    assert response.status_code == 503
+    messages = (await client.get(f"/api/conversations/{first['conversation_id']}/messages")).json()
+    assert [item["id"] for item in messages] == [first["id"]]

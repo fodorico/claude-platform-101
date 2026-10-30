@@ -86,6 +86,39 @@ for (const theme of ['nord', 'dim'] as const) {
       await expectNoViolations(page)
     })
 
+    test('code blocks, edit mode and the shortcuts dialog have no accessibility violations', async ({
+      page,
+      isMobile,
+    }) => {
+      // On a phone the panels are drawers over the chat, so they stay closed here.
+      await page.addInitScript((open) => {
+        localStorage.setItem('panels', JSON.stringify({ history: open, details: open }))
+      }, !isMobile)
+      await mockApi(page, {
+        history: [
+          exchange(
+            1,
+            'Show code',
+            'Here:\n\n```python\ndef add(a, b):\n    return a + b  # sum\n```',
+          ),
+          exchange(2, 'Again', 'Some `inline` code.'),
+        ],
+        answer: () => ({ reply: 'ok' }),
+      })
+      await page.goto(CHAT_URL)
+      await expect(page.getByRole('button', { name: 'Copy code' })).toBeVisible()
+      await page.getByRole('button', { name: 'Edit question' }).click()
+      await expect(page.getByText('Editing your last message')).toBeVisible()
+
+      await expectNoViolations(page)
+
+      if (!isMobile) {
+        await page.getByRole('button', { name: 'Keyboard shortcuts' }).click()
+        await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible()
+        await expectNoViolations(page)
+      }
+    })
+
     test('error state has no accessibility violations', async ({ page }) => {
       await mockApi(page, { answer: () => ({ error: 'Rate limit reached', status: 429 }) })
       await page.goto('/')

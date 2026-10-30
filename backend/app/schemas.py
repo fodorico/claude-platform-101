@@ -15,6 +15,9 @@ class MessageCreate(BaseModel):
     # None means the API's default provider / that provider's default model.
     provider: Provider | None = None
     model: str | None = Field(default=None, max_length=100)
+    # Regenerate or edit: the conversation's last exchange, replaced only if the new answer
+    # succeeds. Its context is everything before it.
+    replaces_id: int | None = None
 
 
 class ExchangeRead(BaseModel):

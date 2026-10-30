@@ -4,6 +4,7 @@ import { ModelChoiceProvider } from '../features/models/ModelChoiceProvider'
 import { ModelPicker } from '../features/models/ModelPicker'
 import { PanelsProvider } from '../features/panels/PanelsProvider'
 import { usePanels, type PanelName } from '../features/panels/panels'
+import { Shortcuts } from './Shortcuts'
 import { ThemeToggle } from './ThemeToggle'
 
 function PanelToggle({
@@ -55,6 +56,7 @@ export function Layout() {
             >
               <SquarePen aria-hidden className="size-5" />
             </Link>
+            <Shortcuts />
             <PanelToggle panel="details" label="Request details" icon={PanelRight} />
           </header>
           <main className="flex min-h-0 flex-1">

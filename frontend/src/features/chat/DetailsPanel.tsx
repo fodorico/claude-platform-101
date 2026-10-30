@@ -1,11 +1,15 @@
 import { useGetModelSettings } from '../../api/generated/api'
 import type { ExchangeRead } from '../../api/generated/model'
 import { PROVIDER_LABELS } from '../models/modelChoice'
+import { modelLabel } from '../models/modelLabel'
 import { SidePanel } from '../panels/SidePanel'
+import { chatTotals } from './chatTotals'
 import { formatDuration } from './format'
 
 interface DetailsPanelProps {
   exchange: ExchangeRead | null
+  /** Every stored exchange of the open chat, for its totals. */
+  exchanges: ExchangeRead[]
   isStreaming: boolean
   onClose: () => void
 }
@@ -30,9 +34,12 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   )
 }
 
-/** What the API did for one answer, plus how the API calls the model. */
-export function DetailsPanel({ exchange, isStreaming, onClose }: DetailsPanelProps) {
+const count = (value: number) => value.toLocaleString('en')
+
+/** What the API did for one answer and for the whole chat, plus how it calls the model. */
+export function DetailsPanel({ exchange, exchanges, isStreaming, onClose }: DetailsPanelProps) {
   const settings = useGetModelSettings()
+  const totals = chatTotals(exchanges)
 
   return (
     <SidePanel side="right" title="Request details" onClose={onClose}>
@@ -62,6 +69,47 @@ export function DetailsPanel({ exchange, isStreaming, onClose }: DetailsPanelPro
             </>
           )}
         </section>
+
+        {totals.total.messages > 0 && (
+          <section aria-labelledby="chat-totals" className="flex flex-col gap-3">
+            <h3 id="chat-totals" className="text-sm font-semibold">
+              This chat
+            </h3>
+            <dl className="grid grid-cols-2 gap-2">
+              <Metric label="Messages" value={count(totals.total.messages)} />
+              <Metric label="Total time" value={formatDuration(totals.total.durationMs)} />
+              <Metric label="Input tokens" value={count(totals.total.inputTokens)} />
+              <Metric label="Output tokens" value={count(totals.total.outputTokens)} />
+            </dl>
+            {totals.byModel.length > 1 && (
+              <table className="table table-xs">
+                <caption className="sr-only">Usage by model</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Model</th>
+                    <th scope="col" className="text-right">
+                      Messages
+                    </th>
+                    <th scope="col" className="text-right">
+                      Tokens in / out
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {totals.byModel.map(([model, usage]) => (
+                    <tr key={model}>
+                      <td title={model}>{modelLabel(model)}</td>
+                      <td className="text-right tabular-nums">{count(usage.messages)}</td>
+                      <td className="text-right tabular-nums">
+                        {count(usage.inputTokens)} / {count(usage.outputTokens)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
 
         <section aria-labelledby="model-settings" className="flex flex-col gap-3">
           <h3 id="model-settings" className="text-sm font-semibold">

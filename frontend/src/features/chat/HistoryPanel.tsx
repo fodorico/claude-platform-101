@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Archive, ArchiveRestore, SquarePen, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { Archive, ArchiveRestore, Search, SquarePen, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { errorMessage } from '../../api/errors'
 import {
   getListConversationMessagesQueryKey,
@@ -26,6 +26,22 @@ interface HistoryPanelProps {
 // Every list of conversations (active and archived) shares this key prefix.
 const CONVERSATIONS_KEY = ['/api/conversations']
 
+// Wait for a pause in typing before searching.
+const SEARCH_DELAY_MS = 250
+
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebounced(value)
+    }, delayMs)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [value, delayMs])
+  return debounced
+}
+
 function groupByDay(conversations: ConversationRead[]) {
   const groups = new Map<string, ConversationRead[]>()
   for (const conversation of conversations) {
@@ -43,7 +59,13 @@ export function HistoryPanel({ currentId, onOpen, onDeleted, onClose }: HistoryP
   const [menuId, setMenuId] = useState<number | null>(null)
   const [toDelete, setToDelete] = useState<number[] | null>(null)
 
-  const conversations = useListConversations({ archived: showArchived })
+  const [search, setSearch] = useState('')
+  const query = useDebounced(search.trim(), SEARCH_DELAY_MS)
+
+  const conversations = useListConversations({
+    archived: showArchived,
+    ...(query ? { q: query } : {}),
+  })
   const list = conversations.data ?? []
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: CONVERSATIONS_KEY })
@@ -98,6 +120,27 @@ export function HistoryPanel({ currentId, onOpen, onDeleted, onClose }: HistoryP
           <SquarePen aria-hidden className="size-4" />
           New chat
         </button>
+        <label className="input input-sm w-full">
+          <Search aria-hidden className="size-4 opacity-70" />
+          <span className="sr-only">Search chats</span>
+          <input
+            id="chat-search"
+            type="search"
+            placeholder="Search chats"
+            maxLength={100}
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+            }}
+            onKeyDown={(event) => {
+              // Escape clears the search first; a second one closes the panel.
+              if (event.key === 'Escape' && search) {
+                event.stopPropagation()
+                setSearch('')
+              }
+            }}
+          />
+        </label>
         <div className="flex items-center gap-2">
           <div className="join flex-1">
             <button
@@ -158,7 +201,11 @@ export function HistoryPanel({ currentId, onOpen, onDeleted, onClose }: HistoryP
 
       {conversations.isSuccess && list.length === 0 && (
         <p className="px-2 py-4 text-sm text-base-content/80">
-          {showArchived ? 'No archived chats.' : 'Your chats will appear here.'}
+          {query
+            ? 'No chats match your search.'
+            : showArchived
+              ? 'No archived chats.'
+              : 'Your chats will appear here.'}
         </p>
       )}
       {groupByDay(list).map(([label, items]) => (

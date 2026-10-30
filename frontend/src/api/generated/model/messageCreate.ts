@@ -15,4 +15,5 @@ export interface MessageCreate {
   conversation_id?: number | null
   model?: string | null
   provider?: MessageCreateProvider
+  replaces_id?: number | null
 }

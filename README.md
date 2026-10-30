@@ -64,11 +64,13 @@ Git hooks: `cd backend && uv run pre-commit install`.
 
 - `POST /api/messages`: send a message and get the stored exchange in one response. Body:
   `content`, plus optional `conversation_id` (none starts a new chat), `provider` and `model`.
-  Earlier messages of the conversation are sent as context.
+  Earlier messages of the conversation are sent as context. `replaces_id` (the chat's last
+  exchange) regenerates or edits it: the new answer replaces it only once it succeeds.
 - `POST /api/messages/stream`: same, streamed as server-sent events (`delta`, then `done`, then
   `title` for a new chat; or `error`). The UI uses this one.
-- `GET /api/conversations`: chats, latest activity first. `GET /api/conversations/{id}/messages`:
-  a chat's exchanges, oldest first.
+- `GET /api/conversations`: chats, latest activity first; `q` searches titles and messages (any
+  case). `GET /api/conversations/{id}`: one chat. `GET /api/conversations/{id}/messages`: a chat's
+  exchanges, oldest first.
 - `PATCH /api/conversations/{id}` (rename with `title`, archive with `archived`),
   `DELETE /api/conversations/{id}`, and `POST /api/conversations/bulk` (`ids` + `action`:
   `archive`, `unarchive` or `delete`). `GET /api/conversations?archived=true` lists archived chats.

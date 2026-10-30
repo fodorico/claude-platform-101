@@ -131,3 +131,30 @@ async def test_bulk_needs_at_least_one_id(client: AsyncClient) -> None:
     response = await client.post("/api/conversations/bulk", json={"ids": [], "action": "delete"})
 
     assert response.status_code == 422
+
+
+async def test_get_one_conversation(client: AsyncClient) -> None:
+    conversation_id = await start_chat(client, "Hola")
+
+    response = await client.get(f"/api/conversations/{conversation_id}")
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Fake title"
+    assert (await client.get("/api/conversations/99")).status_code == 404
+
+
+async def test_search_matches_titles_and_messages_in_any_case(client: AsyncClient) -> None:
+    about_apis = await start_chat(client, "What is an API?")
+    await client.patch(f"/api/conversations/{about_apis}", json={"title": "APIs 101"})
+    await start_chat(client, "Tips for 100% better PROMPTS")
+    await start_chat(client, "Unrelated")
+
+    async def search(q: str) -> list[str]:
+        response = await client.get("/api/conversations", params={"q": q})
+        return [conversation["title"] for conversation in response.json()]
+
+    assert await search("apis") == ["APIs 101"]
+    assert await search("prompts") == ["Fake title"]  # found in the message, not the title
+    assert await search("100%") == ["Fake title"]
+    assert await search("%") == ["Fake title"]  # literal, not a wildcard
+    assert await search("nothing here") == []

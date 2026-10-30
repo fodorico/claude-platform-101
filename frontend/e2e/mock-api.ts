@@ -79,8 +79,14 @@ export async function mockApi(
 
   await page.route('**/api/model-settings', (route) => route.fulfill({ json: modelSettings }))
   await page.route('**/api/conversations?*', (route) => {
-    const archived = new URL(route.request().url()).searchParams.get('archived') === 'true'
-    const listed = chats.filter((chat) => (chat.conversation.archived_at !== null) === archived)
+    const params = new URL(route.request().url()).searchParams
+    const archived = params.get('archived') === 'true'
+    const q = params.get('q')?.toLowerCase()
+    const listed = chats.filter(
+      (chat) =>
+        (chat.conversation.archived_at !== null) === archived &&
+        (!q || chat.conversation.title.toLowerCase().includes(q)),
+    )
     return route.fulfill({ json: listed.map((chat) => chat.conversation) })
   })
   await page.route('**/api/conversations/bulk', (route) => {
@@ -98,6 +104,7 @@ export async function mockApi(
     const id = Number(new URL(route.request().url()).pathname.split('/').pop())
     const chat = chats.find((item) => item.conversation.id === id)
     if (!chat) return route.fulfill({ status: 404, json: { detail: 'Conversation not found' } })
+    if (route.request().method() === 'GET') return route.fulfill({ json: chat.conversation })
     const body = route.request().postDataJSON() as { title?: string; archived?: boolean }
     if (body.title) chat.conversation.title = body.title
     if (body.archived !== undefined) chat.conversation.archived_at = body.archived ? now : null
@@ -136,6 +143,7 @@ export async function mockApi(
       chats.unshift(chat)
     }
     const created = exchange(nextId++, body.content, result.reply, chat.conversation.id)
+    chat.messages = chat.messages.filter((item) => item.id !== body.replaces_id)
     chat.messages.push(created)
     const middle = Math.ceil(result.reply.length / 2)
     const events: [string, unknown][] = [

@@ -1,7 +1,7 @@
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,19 +25,34 @@ async def list_conversations(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     archived: bool = False,
+    q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> list[ConversationRead]:
     """Return the active (or, with `archived=true`, the archived) conversations, most recent
-    activity first."""
-    archived_filter = (
+    activity first. `q` keeps those whose title or messages contain it (any case)."""
+    query = select(Conversation).where(
         Conversation.archived_at.is_not(None) if archived else Conversation.archived_at.is_(None)
     )
+    if q:
+        # % and _ are wildcards in LIKE; search for them literally.
+        pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        in_messages = exists().where(
+            Exchange.conversation_id == Conversation.id,
+            or_(
+                Exchange.prompt.ilike(pattern, escape="\\"),
+                Exchange.reply.ilike(pattern, escape="\\"),
+            ),
+        )
+        query = query.where(or_(Conversation.title.ilike(pattern, escape="\\"), in_messages))
     result = await session.scalars(
-        select(Conversation)
-        .where(archived_filter)
-        .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
-        .limit(limit)
+        query.order_by(Conversation.updated_at.desc(), Conversation.id.desc()).limit(limit)
     )
     return [ConversationRead.model_validate(conversation) for conversation in result]
+
+
+@router.get("/{conversation_id}")
+async def get_conversation(conversation_id: int, session: SessionDep) -> ConversationRead:
+    """Return one conversation, active or archived."""
+    return ConversationRead.model_validate(await _get_or_404(session, conversation_id))
 
 
 @router.get("/{conversation_id}/messages")

@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { SendHorizontal } from 'lucide-react'
+import { Pencil, SendHorizontal, Square, X } from 'lucide-react'
+import { useEffect } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -24,13 +25,26 @@ interface MessageFormProps {
   /** Resolves when the message was sent; the form is cleared only then. */
   onSend: (content: string) => Promise<unknown>
   isSending: boolean
+  /** Stops the answer being written. */
+  onStop: () => void
+  /** The message being edited, put in the box; null when writing a new one. */
+  editing: string | null
+  onCancelEdit: () => void
 }
 
-export function MessageForm({ onSend, isSending }: MessageFormProps) {
+export function MessageForm({
+  onSend,
+  isSending,
+  onStop,
+  editing,
+  onCancelEdit,
+}: MessageFormProps) {
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    setFocus,
     control,
     formState: { errors },
   } = useForm<MessageFormValues>({
@@ -38,6 +52,12 @@ export function MessageForm({ onSend, isSending }: MessageFormProps) {
     defaultValues: { content: '' },
   })
   const length = useWatch({ control, name: 'content' }).length
+
+  useEffect(() => {
+    if (editing === null) return
+    setValue('content', editing)
+    setFocus('content')
+  }, [editing, setValue, setFocus])
 
   const submit = handleSubmit(async ({ content }) => {
     try {
@@ -50,6 +70,23 @@ export function MessageForm({ onSend, isSending }: MessageFormProps) {
 
   return (
     <form onSubmit={(event) => void submit(event)} noValidate>
+      {editing !== null && (
+        <div className="mb-2 flex items-center gap-2 px-2 text-sm">
+          <Pencil aria-hidden className="size-4" />
+          <span className="flex-1">Editing your last message</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs gap-1"
+            onClick={() => {
+              reset()
+              onCancelEdit()
+            }}
+          >
+            <X aria-hidden className="size-3" />
+            Cancel
+          </button>
+        </div>
+      )}
       <label className="sr-only" htmlFor="message">
         Message
       </label>
@@ -62,7 +99,7 @@ export function MessageForm({ onSend, isSending }: MessageFormProps) {
           id="message"
           className="field-sizing-content max-h-48 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 outline-none"
           rows={1}
-          placeholder="Ask anything… (Enter to send, Shift+Enter for a new line)"
+          placeholder="Ask anything…"
           disabled={isSending}
           aria-invalid={errors.content ? true : undefined}
           onKeyDown={(event) => {
@@ -73,21 +110,29 @@ export function MessageForm({ onSend, isSending }: MessageFormProps) {
           }}
           {...register('content')}
         />
-        <button
-          type="submit"
-          className="btn btn-primary btn-circle"
-          disabled={isSending}
-          aria-label={isSending ? 'Sending' : 'Send'}
-        >
-          {isSending ? (
-            <span className="loading loading-spinner loading-sm" aria-hidden />
-          ) : (
+        {isSending ? (
+          <button
+            type="button"
+            className="btn btn-circle btn-neutral"
+            aria-label="Stop answering"
+            onClick={onStop}
+          >
+            <Square aria-hidden className="size-4 fill-current" />
+          </button>
+        ) : (
+          <button type="submit" className="btn btn-primary btn-circle" aria-label="Send">
             <SendHorizontal aria-hidden className="size-5" />
-          )}
-        </button>
+          </button>
+        )}
       </div>
-      <div className="mt-1 flex justify-between px-2 text-xs">
-        <span className="text-error">{errors.content?.message}</span>
+      <div className="mt-1 flex justify-between gap-2 px-2 text-xs">
+        {errors.content ? (
+          <span className="text-error">{errors.content.message}</span>
+        ) : (
+          <span className="hidden text-base-content/80 sm:inline">
+            Enter to send · Shift+Enter for a new line
+          </span>
+        )}
         {length >= SHOW_COUNTER_FROM && (
           <span className={length > MAX_MESSAGE_LENGTH ? 'text-error' : 'text-base-content/80'}>
             {length.toLocaleString('en')} / {MAX_MESSAGE_LENGTH.toLocaleString('en')}

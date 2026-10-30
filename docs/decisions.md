@@ -58,3 +58,10 @@
   writing in one brings it back. Deleting is permanent and removes the messages (database
   cascade); the UI always asks for confirmation. Several chats are archived, restored or deleted
   with one request (`POST /api/conversations/bulk`, up to 100 ids, unknown ids skipped).
+- **2026-10-30 — Chat polish.** Regenerating and editing only apply to a chat's last exchange
+  (`replaces_id`): the old exchange is deleted in the same transaction that stores the new one,
+  so a failed or stopped answer keeps the original. Stopping aborts the request; the server
+  stores nothing for it. Code is highlighted with `rehype-highlight` (highlight.js, no language
+  auto-detection to keep it cheap) and colored from the daisyUI theme variables, so both themes
+  pass axe contrast checks. History search is a case-insensitive `ILIKE` over titles and
+  messages, fine at this size; a full-text index can come later.
