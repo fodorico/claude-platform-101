@@ -17,9 +17,13 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@db:5432/app
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
-      ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-low}
+      # Empty values fall back to the backend defaults (see backend/app/config.py).
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
     depends_on:
       db:
         condition: service_healthy

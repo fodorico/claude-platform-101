@@ -14,6 +14,10 @@
 - **2026-10-29 — Anthropic SDK 2.x uses httpx2.** The SDK's HTTP layer is `httpx2`, so service
   tests mock it with `httpx2.MockTransport`. `httpx` stays for the app's own HTTP needs and the
   FastAPI test client.
+- **2026-10-29 — Gemini as an optional provider.** The Anthropic API is billed separately from
+  the Claude subscription and the account has no API credit yet, so Gemini (free tier) can answer
+  instead, chosen with `LLM_PROVIDER`. Claude stays the default so the course practice keeps
+  using the Claude API. Both providers sit behind `app/services/llm.py`.
 - **2026-10-30 — Public repository with a protected main.** Rulesets need GitHub Pro on private
   repos, so the repo was made public (history checked for secrets first); it also serves as public
   evidence for the career plan. main accepts changes only through PRs with all CI jobs green.

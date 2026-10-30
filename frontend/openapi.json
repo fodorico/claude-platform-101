@@ -196,7 +196,7 @@
         ]
       },
       "post": {
-        "description": "Send a message to Claude, store the exchange and return it.",
+        "description": "Send a message to the configured model, store the exchange and return it.",
         "operationId": "send_message",
         "requestBody": {
           "content": {

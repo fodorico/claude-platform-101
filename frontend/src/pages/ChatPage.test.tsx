@@ -104,7 +104,7 @@ describe('ChatPage', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('Something')
   })
 
-  it('explains when Claude is unavailable', async () => {
+  it('explains when the AI service is unavailable', async () => {
     const user = userEvent.setup()
     mockApi([], () => jsonResponse({ detail: 'The Claude API returned an error' }, 503))
     renderApp()
@@ -112,6 +112,8 @@ describe('ChatPage', () => {
     await user.type(await screen.findByLabelText('Message'), 'Something')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Claude is not available right now')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The AI service is not available right now',
+    )
   })
 })
