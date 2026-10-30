@@ -89,7 +89,7 @@ export function MessageForm({ onSend, isSending }: MessageFormProps) {
       <div className="mt-1 flex justify-between px-2 text-xs">
         <span className="text-error">{errors.content?.message}</span>
         {length >= SHOW_COUNTER_FROM && (
-          <span className={length > MAX_MESSAGE_LENGTH ? 'text-error' : 'text-base-content/50'}>
+          <span className={length > MAX_MESSAGE_LENGTH ? 'text-error' : 'text-base-content/80'}>
             {length.toLocaleString('en')} / {MAX_MESSAGE_LENGTH.toLocaleString('en')}
           </span>
         )}

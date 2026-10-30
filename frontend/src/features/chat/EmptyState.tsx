@@ -19,7 +19,7 @@ export function EmptyState({ onPick, disabled }: EmptyStateProps) {
       </span>
       <div>
         <h1 className="text-2xl font-semibold">What would you like to know?</h1>
-        <p className="mt-1 text-base-content/60">No messages yet. Ask your first question.</p>
+        <p className="mt-1 text-base-content/80">No messages yet. Ask your first question.</p>
       </div>
       <div className="flex max-w-xl flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((suggestion) => (

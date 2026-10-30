@@ -46,7 +46,7 @@ export function AssistantBubble({ text, model, createdAt, isStreaming }: Assista
         )}
       </div>
       {model && createdAt && (
-        <div className="chat-footer mt-1 text-xs opacity-50">
+        <div className="chat-footer mt-1 text-xs text-base-content/80">
           {model} · {timeFormat.format(new Date(createdAt))}
         </div>
       )}

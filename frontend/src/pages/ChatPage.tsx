@@ -30,7 +30,7 @@ export function ChatPage() {
             <span className="loading loading-dots mx-auto my-auto" aria-label="Loading" />
           )}
           {history.isError && (
-            <div role="alert" className="alert alert-warning alert-soft">
+            <div role="alert" className="alert alert-warning alert-soft text-base-content">
               <span>{errorMessage(history.error)}</span>
             </div>
           )}
@@ -65,7 +65,7 @@ export function ChatPage() {
       <section aria-label="Compose" className="border-t border-base-300 bg-base-200/90">
         <div className="mx-auto flex max-w-3xl flex-col gap-2 px-4 pt-3 pb-2">
           {answer.error !== null && (
-            <div role="alert" className="alert alert-error alert-soft py-2">
+            <div role="alert" className="alert alert-error alert-soft py-2 text-base-content">
               <CircleAlert aria-hidden className="size-5" />
               <span>{errorMessage(answer.error)}</span>
             </div>
