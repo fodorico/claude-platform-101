@@ -60,6 +60,32 @@ for (const theme of ['nord', 'dim'] as const) {
       await expectNoViolations(page)
     })
 
+    test('chat options, selection and delete dialog have no accessibility violations', async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem('panels', JSON.stringify({ history: true, details: false }))
+      })
+      await mockApi(page, {
+        history: [exchange(1, 'What is an API?', 'A contract between **programs**.')],
+        answer: () => ({ reply: 'ok' }),
+      })
+      await page.goto('/')
+      const history = page.getByRole('complementary', { name: 'History' })
+
+      await history.getByRole('button', { name: 'Options for Earlier chat' }).click()
+      await expect(history.getByRole('button', { name: 'Rename' })).toBeVisible()
+      await expectNoViolations(page)
+
+      await history.getByRole('button', { name: 'Select' }).click()
+      await history.getByRole('checkbox', { name: 'Earlier chat' }).check()
+      await expectNoViolations(page)
+
+      await history.getByRole('button', { name: 'Delete' }).click()
+      await expect(page.getByRole('alertdialog')).toBeVisible()
+      await expectNoViolations(page)
+    })
+
     test('error state has no accessibility violations', async ({ page }) => {
       await mockApi(page, { answer: () => ({ error: 'Rate limit reached', status: 429 }) })
       await page.goto('/')

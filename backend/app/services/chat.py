@@ -71,6 +71,8 @@ async def store_exchange(
     else:
         conversation = await session.get_one(Conversation, conversation_id)
         conversation.updated_at = func.now()
+        # Writing in an archived chat brings it back to the main list.
+        conversation.archived_at = None
 
     exchange = Exchange(
         conversation_id=conversation.id,

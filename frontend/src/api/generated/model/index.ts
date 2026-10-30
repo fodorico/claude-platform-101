@@ -5,7 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './conversationBulkAction'
+export * from './conversationBulkActionAction'
+export * from './conversationBulkResult'
 export * from './conversationRead'
+export * from './conversationUpdate'
 export * from './exchangeRead'
 export * from './healthRead'
 export * from './hTTPValidationError'

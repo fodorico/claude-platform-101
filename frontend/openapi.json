@@ -1,8 +1,62 @@
 {
   "components": {
     "schemas": {
+      "ConversationBulkAction": {
+        "properties": {
+          "action": {
+            "enum": [
+              "archive",
+              "unarchive",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids",
+          "action"
+        ],
+        "title": "ConversationBulkAction",
+        "type": "object"
+      },
+      "ConversationBulkResult": {
+        "description": "How many of the given conversations existed and were changed.",
+        "properties": {
+          "affected": {
+            "title": "Affected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "affected"
+        ],
+        "title": "ConversationBulkResult",
+        "type": "object"
+      },
       "ConversationRead": {
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -25,10 +79,42 @@
         "required": [
           "id",
           "title",
+          "archived_at",
           "created_at",
           "updated_at"
         ],
         "title": "ConversationRead",
+        "type": "object"
+      },
+      "ConversationUpdate": {
+        "description": "Rename and/or archive a conversation; fields left out stay as they are.",
+        "properties": {
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ConversationUpdate",
         "type": "object"
       },
       "ExchangeRead": {
@@ -301,7 +387,7 @@
   "paths": {
     "/api/conversations": {
       "get": {
-        "description": "Return the conversations with the most recent activity first.",
+        "description": "Return the active (or, with `archived=true`, the archived) conversations, most recent\nactivity first.",
         "operationId": "list_conversations",
         "parameters": [
           {
@@ -314,6 +400,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Archived",
+              "type": "boolean"
             }
           }
         ],
@@ -344,6 +440,135 @@
           }
         },
         "summary": "List Conversations",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/conversations/bulk": {
+      "post": {
+        "description": "Archive, bring back or delete several conversations at once; unknown ids are skipped.",
+        "operationId": "bulk_update_conversations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationBulkAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationBulkResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Update Conversations",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/conversations/{conversation_id}": {
+      "delete": {
+        "description": "Delete a conversation and its messages. This can't be undone.",
+        "operationId": "delete_conversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Conversation",
+        "tags": [
+          "conversations"
+        ]
+      },
+      "patch": {
+        "description": "Rename a conversation, archive it or bring it back.",
+        "operationId": "update_conversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Conversation",
         "tags": [
           "conversations"
         ]

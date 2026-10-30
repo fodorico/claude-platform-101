@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -28,6 +28,7 @@ function conversation(id: number, title: string): ConversationRead {
   return {
     id,
     title,
+    archived_at: null,
     created_at: '2026-10-29T12:00:00Z',
     updated_at: '2026-10-29T12:00:00Z',
   }
@@ -66,8 +67,32 @@ function mockApi(
   let nextId = 100
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/api/model-settings') return Promise.resolve(jsonResponse(modelSettings))
-    if (url === '/api/conversations') {
-      return Promise.resolve(jsonResponse(chats.map((chat) => chat.conversation)))
+    const { pathname, searchParams } = new URL(url, 'http://test')
+    if (pathname === '/api/conversations') {
+      const archived = searchParams.get('archived') === 'true'
+      const listed = chats.filter((chat) => (chat.conversation.archived_at !== null) === archived)
+      return Promise.resolve(jsonResponse(listed.map((chat) => chat.conversation)))
+    }
+    if (pathname === '/api/conversations/bulk') {
+      const { ids, action } = JSON.parse(init?.body as string) as { ids: number[]; action: string }
+      for (const id of ids) {
+        const index = chats.findIndex((chat) => chat.conversation.id === id)
+        const chat = chats[index]
+        if (!chat) continue
+        if (action === 'delete') chats.splice(index, 1)
+        else chat.conversation.archived_at = action === 'archive' ? '2026-10-30T00:00:00Z' : null
+      }
+      return Promise.resolve(jsonResponse({ affected: ids.length }))
+    }
+    const chatMatch = /^\/api\/conversations\/(\d+)$/.exec(pathname)
+    if (chatMatch && init?.method === 'PATCH') {
+      const chat = chats.find((item) => item.conversation.id === Number(chatMatch[1]))
+      const body = JSON.parse(init.body as string) as { title?: string; archived?: boolean }
+      if (chat && body.title) chat.conversation.title = body.title
+      if (chat && body.archived !== undefined) {
+        chat.conversation.archived_at = body.archived ? '2026-10-30T00:00:00Z' : null
+      }
+      return Promise.resolve(jsonResponse(chat?.conversation))
     }
     const messagesMatch = /^\/api\/conversations\/(\d+)\/messages$/.exec(url)
     if (messagesMatch) {
@@ -210,10 +235,11 @@ describe('ChatPage', () => {
     await user.type(await screen.findByLabelText('Message'), 'Hello{Enter}')
 
     const history = screen.getByRole('complementary', { name: 'History' })
-    expect(await within(history).findByRole('button', { name: 'Title: Hello' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    const row = await within(history).findByRole('button', { name: 'Title: Hello' })
+    // The chat's URL is set right after the list refreshes; wait for both.
+    await waitFor(() => {
+      expect(row).toHaveAttribute('aria-current', 'page')
+    })
   })
 
   it('sends a suggestion from the empty state', async () => {
@@ -325,5 +351,115 @@ describe('ChatPage', () => {
     expect(within(details).getByText('850 ms')).toBeInTheDocument()
     expect(within(details).getByText('7')).toBeInTheDocument()
     expect(await within(details).findByText('Answer briefly.')).toBeInTheDocument()
+  })
+
+  describe('managing chats in the history', () => {
+    const chats = () => [
+      mcpChat(),
+      { conversation: conversation(2, 'Prompt tips'), messages: [] },
+      { conversation: conversation(3, 'Old idea'), messages: [] },
+    ]
+
+    async function openHistory() {
+      const user = userEvent.setup()
+      await user.click(await screen.findByRole('button', { name: 'History' }))
+      const history = screen.getByRole('complementary', { name: 'History' })
+      await within(history).findByRole('button', { name: 'About MCP' })
+      return { user, history }
+    }
+
+    it('renames a chat from its options', async () => {
+      mockApi(chats())
+      renderApp()
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Options for Prompt tips' }))
+      await user.click(within(history).getByRole('button', { name: 'Rename' }))
+      const input = within(history).getByLabelText('Chat title')
+      await user.clear(input)
+      await user.type(input, 'Better prompts{Enter}')
+
+      expect(
+        await within(history).findByRole('button', { name: 'Better prompts' }),
+      ).toBeInTheDocument()
+    })
+
+    it('cancels a rename with Escape', async () => {
+      const sent = mockApi(chats())
+      renderApp()
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Options for Prompt tips' }))
+      await user.click(within(history).getByRole('button', { name: 'Rename' }))
+      await user.type(within(history).getByLabelText('Chat title'), ' changed{Escape}')
+
+      expect(within(history).getByRole('button', { name: 'Prompt tips' })).toBeInTheDocument()
+      expect(sent).toEqual([])
+    })
+
+    it('archives a chat and brings it back from the archived list', async () => {
+      mockApi(chats())
+      renderApp()
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Options for Old idea' }))
+      await user.click(within(history).getByRole('button', { name: 'Archive' }))
+      await waitFor(() => {
+        expect(within(history).queryByRole('button', { name: 'Old idea' })).not.toBeInTheDocument()
+      })
+
+      await user.click(within(history).getByRole('button', { name: 'Archived' }))
+      await user.click(await within(history).findByRole('button', { name: 'Options for Old idea' }))
+      await user.click(within(history).getByRole('button', { name: 'Unarchive' }))
+      expect(await within(history).findByText('No archived chats.')).toBeInTheDocument()
+    })
+
+    it('archives several selected chats at once', async () => {
+      mockApi(chats())
+      renderApp()
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Select' }))
+      await user.click(within(history).getByRole('checkbox', { name: 'About MCP' }))
+      await user.click(within(history).getByRole('checkbox', { name: 'Prompt tips' }))
+      expect(within(history).getByText('2 selected')).toBeInTheDocument()
+      await user.click(within(history).getByRole('button', { name: 'Archive' }))
+
+      await waitFor(() => {
+        expect(within(history).queryByText('About MCP')).not.toBeInTheDocument()
+      })
+      expect(within(history).getByRole('button', { name: 'Old idea' })).toBeInTheDocument()
+    })
+
+    it('deletes the selected chats after confirming and leaves the open one', async () => {
+      mockApi(chats())
+      const router = renderApp('/?chat=1')
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Select' }))
+      await user.click(within(history).getByRole('checkbox', { name: 'Select all' }))
+      await user.click(within(history).getByRole('button', { name: 'Delete' }))
+      const dialog = screen.getByRole('alertdialog', { name: 'Delete 3 chats?' })
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+      expect(await within(history).findByText('Your chats will appear here.')).toBeInTheDocument()
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(router.state.location.search).toBe('')
+      expect(await screen.findByText(/No messages yet/)).toBeInTheDocument()
+    })
+
+    it('keeps the chat when the deletion is cancelled', async () => {
+      mockApi(chats())
+      renderApp()
+      const { user, history } = await openHistory()
+
+      await user.click(within(history).getByRole('button', { name: 'Options for About MCP' }))
+      await user.click(within(history).getByRole('button', { name: 'Delete' }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(within(history).getByRole('button', { name: 'About MCP' })).toBeInTheDocument()
+    })
   })
 })

@@ -69,6 +69,9 @@ Git hooks: `cd backend && uv run pre-commit install`.
   `title` for a new chat; or `error`). The UI uses this one.
 - `GET /api/conversations`: chats, latest activity first. `GET /api/conversations/{id}/messages`:
   a chat's exchanges, oldest first.
+- `PATCH /api/conversations/{id}` (rename with `title`, archive with `archived`),
+  `DELETE /api/conversations/{id}`, and `POST /api/conversations/bulk` (`ids` + `action`:
+  `archive`, `unarchive` or `delete`). `GET /api/conversations?archived=true` lists archived chats.
 - `GET /api/model-settings`: providers (and whether they have an API key), their models, max
   tokens and system prompt. Interactive docs at `/docs`.
 

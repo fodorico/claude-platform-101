@@ -6,6 +6,7 @@
  */
 
 export interface ConversationRead {
+  archived_at: string | null
   created_at: string
   id: number
   title: string

@@ -15,6 +15,8 @@ class Conversation(Base):
     # Starts as the first message, shortened; then replaced by a title the model writes.
     title: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Archived chats are hidden from the main list; set to None again to bring one back.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Bumped on every new exchange, so the history lists the latest chats first.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

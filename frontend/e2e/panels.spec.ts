@@ -41,7 +41,7 @@ test('history is a drawer on phones that closes after picking a chat', async ({
 
   await page.getByRole('button', { name: 'History' }).click()
   const drawer = page.getByRole('complementary', { name: 'History' })
-  await drawer.getByRole('button', { name: 'Earlier chat' }).click()
+  await drawer.getByRole('button', { name: 'Earlier chat', exact: true }).click()
 
   await expect(drawer).toBeHidden()
   await expect(page.getByText('First answer')).toBeVisible()
