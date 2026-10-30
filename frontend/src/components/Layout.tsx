@@ -1,24 +1,55 @@
-import { Sparkles } from 'lucide-react'
+import { PanelLeft, PanelRight, Sparkles, type LucideIcon } from 'lucide-react'
 import { Link, Outlet } from 'react-router'
+import { PanelsProvider } from '../features/panels/PanelsProvider'
+import { usePanels, type PanelName } from '../features/panels/panels'
 import { ThemeToggle } from './ThemeToggle'
+
+function PanelToggle({
+  panel,
+  label,
+  icon: Icon,
+}: {
+  panel: PanelName
+  label: string
+  icon: LucideIcon
+}) {
+  const panels = usePanels()
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost btn-square"
+      aria-label={label}
+      aria-pressed={panels.open[panel]}
+      onClick={() => {
+        panels.toggle(panel)
+      }}
+    >
+      <Icon aria-hidden className="size-5" />
+    </button>
+  )
+}
 
 export function Layout() {
   return (
-    <div className="flex h-full flex-col bg-base-200">
-      <header className="navbar border-b border-base-300 bg-base-100/80 px-4 backdrop-blur">
-        <div className="flex-1">
-          <Link to="/" className="flex items-center gap-2 text-lg font-semibold">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-content">
-              <Sparkles aria-hidden className="size-4" />
-            </span>
-            Claude Platform 101
-          </Link>
-        </div>
-        <ThemeToggle />
-      </header>
-      <main className="flex min-h-0 flex-1 flex-col">
-        <Outlet />
-      </main>
-    </div>
+    <PanelsProvider>
+      <div className="flex h-full flex-col bg-base-200">
+        <header className="navbar min-h-14 gap-1 border-b border-base-300 bg-base-100 px-2 sm:px-4">
+          <PanelToggle panel="history" label="History" icon={PanelLeft} />
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <Link to="/" className="flex min-w-0 items-center gap-2 px-1 text-lg font-semibold">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-content">
+                <Sparkles aria-hidden className="size-4" />
+              </span>
+              <span className="truncate">Claude Platform 101</span>
+            </Link>
+            <ThemeToggle />
+          </div>
+          <PanelToggle panel="details" label="Request details" icon={PanelRight} />
+        </header>
+        <main className="flex min-h-0 flex-1">
+          <Outlet />
+        </main>
+      </div>
+    </PanelsProvider>
   )
 }

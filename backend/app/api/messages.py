@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -37,7 +38,18 @@ def _http_status(error: LLMError) -> int:
     return status.HTTP_503_SERVICE_UNAVAILABLE
 
 
-async def _store(session: AsyncSession, prompt: str, reply: LLMReply) -> ExchangeRead:
+def _elapsed_ms(start: float) -> int:
+    return round((time.perf_counter() - start) * 1000)
+
+
+async def _store(
+    session: AsyncSession,
+    prompt: str,
+    reply: LLMReply,
+    *,
+    duration_ms: int,
+    first_token_ms: int | None = None,
+) -> ExchangeRead:
     exchange = Exchange(
         prompt=prompt,
         reply=reply.text,
@@ -45,6 +57,8 @@ async def _store(session: AsyncSession, prompt: str, reply: LLMReply) -> Exchang
         stop_reason=reply.stop_reason,
         input_tokens=reply.input_tokens,
         output_tokens=reply.output_tokens,
+        duration_ms=duration_ms,
+        first_token_ms=first_token_ms,
     )
     session.add(exchange)
     await session.commit()
@@ -55,11 +69,12 @@ async def _store(session: AsyncSession, prompt: str, reply: LLMReply) -> Exchang
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def send_message(body: MessageCreate, session: SessionDep, llm: LLMDep) -> ExchangeRead:
     """Send a message to the configured model, store the exchange and return it."""
+    start = time.perf_counter()
     try:
         reply = await llm.ask(body.content)
     except LLMError as exc:
         raise HTTPException(_http_status(exc), str(exc)) from exc
-    return await _store(session, body.content, reply)
+    return await _store(session, body.content, reply, duration_ms=_elapsed_ms(start))
 
 
 def _sse(event: str, payload: BaseModel) -> str:
@@ -86,13 +101,24 @@ async def stream_message(
     end. Nothing is stored if the answer fails, even after part of it was streamed."""
 
     async def events() -> AsyncIterator[str]:
+        start = time.perf_counter()
+        first_token_ms: int | None = None
         try:
             async for item in llm.stream(body.content):
                 if isinstance(item, LLMReply):
+                    duration_ms = _elapsed_ms(start)
                     async with session_factory() as session:
-                        exchange = await _store(session, body.content, item)
+                        exchange = await _store(
+                            session,
+                            body.content,
+                            item,
+                            duration_ms=duration_ms,
+                            first_token_ms=first_token_ms,
+                        )
                     yield _sse("done", exchange)
                 else:
+                    if first_token_ms is None:
+                        first_token_ms = _elapsed_ms(start)
                     yield _sse("delta", StreamDelta(text=item))
         except LLMError as exc:
             yield _sse("error", StreamError(detail=str(exc), status=_http_status(exc)))

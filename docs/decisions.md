@@ -35,3 +35,11 @@
   on every screen state in both themes. The API is mocked in the browser (`e2e/mock-api.ts`), so
   the suite needs no backend or database and stays fast; the backend keeps its own integration
   tests. Runs as the `e2e` CI job (report uploaded on failure).
+- **2026-10-30 — Side panels and answer metrics.** The chat combines three explored layouts: a
+  polished single column, a history panel (left) and a request details panel (right). Both panels
+  are toggled from the header, start closed and the choice is saved in localStorage; below the
+  `lg` breakpoint they are drawers over the chat. The API measures each answer's total time and,
+  when streamed, the time to the first token (new nullable columns `duration_ms` and
+  `first_token_ms`; older rows have none) and returns stop reason and token usage, which were
+  already stored. `GET /api/model-settings` exposes provider, model, max tokens and system prompt
+  for the details panel; this is a practice app, so showing the system prompt is intended.

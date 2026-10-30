@@ -26,6 +26,7 @@ import type {
   HealthRead,
   ListMessagesParams,
   MessageCreate,
+  ModelSettingsRead,
 } from './model'
 
 import { apiFetch } from '../http'
@@ -487,4 +488,118 @@ export const useStreamMessage = <TError = HTTPValidationError, TContext = unknow
   TContext
 > => {
   return useMutation(getStreamMessageMutationOptions(options), queryClient)
+}
+
+export const getGetModelSettingsUrl = () => {
+  return `/api/model-settings`
+}
+
+/**
+ * Return the provider, model and request settings used to answer messages.
+ * @summary Get Model Settings
+ */
+export const getModelSettings = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ModelSettingsRead> => {
+  return apiFetch<ModelSettingsRead>(getGetModelSettingsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetModelSettingsQueryKey = () => {
+  return [`/api/model-settings`] as const
+}
+
+export const getGetModelSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getModelSettings>>,
+  TError = unknown,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSettings>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetModelSettingsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getModelSettings>>> = ({ signal }) =>
+    getModelSettings({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getModelSettings>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetModelSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getModelSettings>>>
+export type GetModelSettingsQueryError = unknown
+
+export function useGetModelSettings<
+  TData = Awaited<ReturnType<typeof getModelSettings>>,
+  TError = unknown,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSettings>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getModelSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getModelSettings>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetModelSettings<
+  TData = Awaited<ReturnType<typeof getModelSettings>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSettings>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getModelSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getModelSettings>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetModelSettings<
+  TData = Awaited<ReturnType<typeof getModelSettings>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSettings>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Model Settings
+ */
+
+export function useGetModelSettings<
+  TData = Awaited<ReturnType<typeof getModelSettings>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSettings>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetModelSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }

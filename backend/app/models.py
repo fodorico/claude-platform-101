@@ -18,6 +18,9 @@ class Exchange(Base):
     stop_reason: Mapped[str] = mapped_column(String(50))
     input_tokens: Mapped[int]
     output_tokens: Mapped[int]
+    # Wall-clock time measured by the API; first_token_ms only exists for streamed answers.
+    duration_ms: Mapped[int | None]
+    first_token_ms: Mapped[int | None]
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

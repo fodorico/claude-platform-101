@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types as genai_types
 from pydantic import SecretStr
 
-from app.api import health, messages
+from app.api import health, messages, model_settings
 from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 from app.services.claude import ClaudeService
@@ -62,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with AsyncExitStack() as stack:
             engine = create_engine(settings.database_url)
             stack.push_async_callback(engine.dispose)
+            app.state.settings = settings
             app.state.session_factory = create_session_factory(engine)
             app.state.llm_service = build_llm_service(settings, stack)
             yield
@@ -81,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(messages.router)
+    app.include_router(model_settings.router)
     return app
 
 

@@ -31,6 +31,7 @@ async def test_stream_sends_deltas_then_the_stored_exchange(client: AsyncClient)
     assert name == "done"
     assert exchange["prompt"] == "Hola"
     assert exchange["reply"] == "Reply to: Hola"
+    assert 0 <= exchange["first_token_ms"] <= exchange["duration_ms"]
 
     history = (await client.get("/api/messages")).json()
     assert [item["id"] for item in history] == [exchange["id"]]
