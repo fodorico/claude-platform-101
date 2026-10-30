@@ -1,3 +1,5 @@
 dist
 coverage
 openapi.json
+playwright-report
+test-results
