@@ -137,6 +137,7 @@ async def test_ask_applies_options_and_returns_thoughts_and_cache_usage() -> Non
     config = models.calls[0]["config"]
     assert (config.temperature, config.system_instruction) == (0.3, "Custom.")
     assert config.thinking_config.include_thoughts is True
+    assert config.thinking_config.thinking_budget == -1
     assert (reply.text, reply.thinking) == ("Done", "Let me see.")
     # Thinking tokens are billed as output.
     assert (reply.output_tokens, reply.cache_read_tokens) == (7, 8)

@@ -45,8 +45,9 @@ class GeminiService:
             system_instruction=options.system or self._system_prompt,
             max_output_tokens=options.max_tokens or self._max_tokens,
             temperature=options.temperature,
-            # Thought summaries come back as parts marked `thought`.
-            thinking_config=types.ThinkingConfig(include_thoughts=True)
+            # Thought summaries come back as parts marked `thought`. Flash-Lite doesn't think
+            # unless given a budget; -1 lets the model decide how much.
+            thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_budget=-1)
             if options.show_thinking
             else None,
         )
