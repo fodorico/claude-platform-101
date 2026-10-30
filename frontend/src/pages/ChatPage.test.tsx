@@ -2,9 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExchangeRead } from '../api/generated/model'
 import { routes } from '../routes'
+import { sseResponse } from '../test/sse'
 
 function exchange(id: number, prompt: string): ExchangeRead {
   return {
@@ -23,14 +24,31 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-/** In-memory fake of the backend: GET returns history, POST runs `onPost`. */
-function mockApi(history: ExchangeRead[], onPost: (content: string) => Response) {
+type StreamOutcome = { ok: true } | { ok: false; detail: string; status: number }
+
+/** In-memory fake of the backend: GET returns history, the stream endpoint answers. */
+function mockApi(history: ExchangeRead[], outcome: (content: string) => StreamOutcome) {
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (init?.method === 'POST') {
-      const { content } = JSON.parse(init.body as string) as { content: string }
-      const response = onPost(content)
-      if (response.ok) history.unshift(exchange(history.length + 1, content))
-      return Promise.resolve(response)
+    if (url === '/api/messages/stream') {
+      const { content } = JSON.parse(init?.body as string) as { content: string }
+      const result = outcome(content)
+      if (!result.ok) {
+        return Promise.resolve(
+          sseResponse([
+            ['delta', { text: 'Partial' }],
+            ['error', { detail: result.detail, status: result.status }],
+          ]),
+        )
+      }
+      const stored = exchange(history.length + 1, content)
+      history.unshift(stored)
+      return Promise.resolve(
+        sseResponse([
+          ['delta', { text: 'Reply to ' }],
+          ['delta', { text: content }],
+          ['done', stored],
+        ]),
+      )
     }
     expect(url).toContain('/api/messages')
     return Promise.resolve(jsonResponse(history))
@@ -50,15 +68,12 @@ function renderApp() {
 }
 
 describe('ChatPage', () => {
-  beforeEach(() => {
-    vi.unstubAllGlobals()
-  })
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
   it('shows the stored history', async () => {
-    mockApi([exchange(1, 'What is MCP?')], () => jsonResponse({}, 201))
+    mockApi([exchange(1, 'What is MCP?')], () => ({ ok: true }))
 
     renderApp()
 
@@ -66,9 +81,9 @@ describe('ChatPage', () => {
     expect(screen.getByText('Reply to What is MCP?')).toBeInTheDocument()
   })
 
-  it('sends a message, clears the form and shows the reply', async () => {
+  it('streams the answer, clears the form and shows the stored exchange', async () => {
     const user = userEvent.setup()
-    mockApi([], (content) => jsonResponse(exchange(1, content), 201))
+    mockApi([], () => ({ ok: true }))
     renderApp()
     expect(await screen.findByText(/No messages yet/)).toBeInTheDocument()
 
@@ -81,18 +96,22 @@ describe('ChatPage', () => {
 
   it('does not send an empty message', async () => {
     const user = userEvent.setup()
-    const fetchMock = mockApi([], () => jsonResponse({}, 201))
+    const fetchMock = mockApi([], () => ({ ok: true }))
     renderApp()
 
     await user.click(await screen.findByRole('button', { name: 'Send' }))
 
     expect(await screen.findByText('Write a message first.')).toBeInTheDocument()
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/messages/stream')).toBe(false)
   })
 
-  it('shows the API error and keeps the text for a retry', async () => {
+  it('shows the error from the stream and keeps the text for a retry', async () => {
     const user = userEvent.setup()
-    mockApi([], () => jsonResponse({ detail: 'Claude declined to answer this message' }, 422))
+    mockApi([], () => ({
+      ok: false,
+      detail: 'Claude declined to answer this message',
+      status: 422,
+    }))
     renderApp()
 
     await user.type(await screen.findByLabelText('Message'), 'Something')
@@ -102,11 +121,12 @@ describe('ChatPage', () => {
       'Claude declined to answer this message',
     )
     expect(screen.getByLabelText('Message')).toHaveValue('Something')
+    expect(screen.queryByText('Partial')).not.toBeInTheDocument()
   })
 
   it('explains when the AI service is unavailable', async () => {
     const user = userEvent.setup()
-    mockApi([], () => jsonResponse({ detail: 'The Claude API returned an error' }, 503))
+    mockApi([], () => ({ ok: false, detail: 'The Claude API returned an error', status: 503 }))
     renderApp()
 
     await user.type(await screen.findByLabelText('Message'), 'Something')

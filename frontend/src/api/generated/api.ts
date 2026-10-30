@@ -382,3 +382,109 @@ export const useSendMessage = <TError = HTTPValidationError, TContext = unknown>
 > => {
   return useMutation(getSendMessageMutationOptions(options), queryClient)
 }
+
+export const getStreamMessageUrl = () => {
+  return `/api/messages/stream`
+}
+
+/**
+ * Send a message and stream the answer as it is generated; the exchange is stored at the
+ * end. Nothing is stored if the answer fails, even after part of it was streamed.
+ * @summary Stream Message
+ */
+export const streamMessage = async (
+  messageCreate: MessageCreate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<unknown> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<unknown>(getStreamMessageUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(messageCreate),
+  })
+}
+
+export const getStreamMessageMutationKey = () => ['streamMessage'] as const
+
+export const getStreamMessageMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof streamMessage>>,
+    TError,
+    StreamMessageMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof streamMessage>>,
+  TError,
+  StreamMessageMutationVariables,
+  TContext
+> => {
+  const mutationKey = getStreamMessageMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof streamMessage>>,
+    StreamMessageMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return streamMessage(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type StreamMessageMutationResult = NonNullable<Awaited<ReturnType<typeof streamMessage>>>
+export type StreamMessageMutationBody = MessageCreate
+export type StreamMessageMutationError = HTTPValidationError
+export type StreamMessageMutationVariables = { data: MessageCreate }
+
+/**
+ * @summary Stream Message
+ */
+export const useStreamMessage = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof streamMessage>>,
+      TError,
+      StreamMessageMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof streamMessage>>,
+  TError,
+  StreamMessageMutationVariables,
+  TContext
+> => {
+  return useMutation(getStreamMessageMutationOptions(options), queryClient)
+}

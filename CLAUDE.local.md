@@ -12,6 +12,8 @@ step by step (Building with the Claude API, then MCP).
 - Any backend API change: regenerate the client (`cd frontend && npm run api:generate`) and
   commit it together with the backend change.
 - Database changes always go through an Alembic migration.
+- The streaming events are the one hand-kept contract: change `StreamDelta` / `StreamError` in
+  `backend/app/schemas.py` and `frontend/src/api/stream.ts` together.
 - Model providers live in `backend/app/services/` (`claude.py`, `gemini.py`) behind the
   `LLMService` contract in `llm.py`; `LLM_PROVIDER` picks one. Tests never call a real API
   (fake service for endpoint tests; httpx2 mock transport for Claude, a stub client for Gemini).

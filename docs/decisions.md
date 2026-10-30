@@ -21,3 +21,8 @@
 - **2026-10-30 — Public repository with a protected main.** Rulesets need GitHub Pro on private
   repos, so the repo was made public (history checked for secrets first); it also serves as public
   evidence for the career plan. main accepts changes only through PRs with all CI jobs green.
+- **2026-10-30 — Streaming with server-sent events over POST.** `POST /api/messages/stream`
+  sends `delta`, then `done` (the stored exchange) or `error`. EventSource only supports GET, so the
+  frontend reads the stream with `fetch` in `src/api/stream.ts`, whose event types mirror
+  `StreamDelta` / `StreamError` by hand (the generated client can't consume SSE). The exchange is
+  stored only when the answer completes. The non-streaming endpoint stays.

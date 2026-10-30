@@ -1,17 +1,19 @@
 """GeminiService with a stub in place of the google-genai client."""
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 from google.genai import errors, types
 
 from app.services.gemini import GeminiService
-from app.services.llm import LLMRateLimitError, LLMRefusalError, LLMUnavailableError
+from app.services.llm import LLMRateLimitError, LLMRefusalError, LLMReply, LLMUnavailableError
 
 
 class StubModels:
     def __init__(self, result: types.GenerateContentResponse | Exception) -> None:
         self.result = result
+        self.chunks: list[types.GenerateContentResponse] = []
         self.calls: list[dict[str, Any]] = []
 
     async def generate_content(self, **kwargs: Any) -> types.GenerateContentResponse:
@@ -19,6 +21,20 @@ class StubModels:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
+
+    async def generate_content_stream(
+        self, **kwargs: Any
+    ) -> AsyncIterator[types.GenerateContentResponse]:
+        self.calls.append(kwargs)
+        if isinstance(self.result, Exception):
+            raise self.result
+        chunks = self.chunks
+
+        async def iterate() -> AsyncIterator[types.GenerateContentResponse]:
+            for chunk in chunks:
+                yield chunk
+
+        return iterate()
 
 
 class StubClient:
@@ -97,3 +113,45 @@ async def test_ask_maps_errors(error: Exception, expected_error: type[Exception]
 
     with pytest.raises(expected_error):
         await service.ask("Hi")
+
+
+def chunk(
+    text: str, finish_reason: str | None = None, **overrides: Any
+) -> types.GenerateContentResponse:
+    candidate: dict[str, Any] = {"content": {"role": "model", "parts": [{"text": text}]}}
+    if finish_reason:
+        candidate["finish_reason"] = finish_reason
+    return response(candidates=[candidate], **overrides)
+
+
+async def test_stream_yields_text_then_reply() -> None:
+    service, models = make_service(response())
+    models.chunks = [chunk("Hel"), chunk("lo", finish_reason="STOP")]
+
+    items = [item async for item in service.stream("Hi")]
+
+    assert items[:-1] == ["Hel", "lo"]
+    reply = items[-1]
+    assert isinstance(reply, LLMReply)
+    assert (reply.text, reply.stop_reason, reply.model) == ("Hello", "STOP", "gemini-3.8-flash")
+    assert (reply.input_tokens, reply.output_tokens) == (12, 3)
+    assert models.calls[0]["contents"] == "Hi"
+
+
+async def test_stream_raises_on_refusal_after_text() -> None:
+    service, models = make_service(response())
+    models.chunks = [chunk("Hel"), chunk("", finish_reason="SAFETY")]
+
+    received: list[object] = []
+    with pytest.raises(LLMRefusalError):
+        async for item in service.stream("Hi"):
+            received.append(item)
+    assert received == ["Hel"]
+
+
+async def test_stream_maps_errors() -> None:
+    service, _ = make_service(errors.ServerError(503, {"error": {"message": "overloaded"}}))
+
+    with pytest.raises(LLMUnavailableError):
+        async for _ in service.stream("Hi"):
+            pass
