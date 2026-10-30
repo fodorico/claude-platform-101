@@ -13,6 +13,8 @@
   (2026-10-30).
 - Conversations (multi-turn) with titles written by the model, and a model picker in the header
   (2026-10-30).
+- Manage chats from the history: rename, archive/unarchive, delete (with confirmation), and
+  select several to archive or delete at once (2026-10-30).
 
 ## Next
 

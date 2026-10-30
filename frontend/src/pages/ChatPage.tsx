@@ -2,7 +2,7 @@ import { CircleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { errorMessage } from '../api/errors'
-import { useListConversationMessages, useListConversations } from '../api/generated/api'
+import { useListConversationMessages } from '../api/generated/api'
 import { AssistantMessage, UserBubble } from '../features/chat/Bubbles'
 import { DetailsPanel } from '../features/chat/DetailsPanel'
 import { EmptyState } from '../features/chat/EmptyState'
@@ -27,7 +27,6 @@ function useConversationId(): number | null {
 export function ChatPage() {
   const conversationId = useConversationId()
   const [, setParams] = useSearchParams()
-  const conversations = useListConversations()
   const messages = useListConversationMessages(conversationId ?? 0, {
     query: { enabled: conversationId !== null },
   })
@@ -84,11 +83,13 @@ export function ChatPage() {
     <div className="flex min-h-0 min-w-0 flex-1">
       {panels.open.history && (
         <HistoryPanel
-          conversations={conversations.data ?? []}
           currentId={conversationId}
           onOpen={(id) => {
             openConversation(id)
             if (isSmallScreen()) panels.close('history')
+          }}
+          onDeleted={(ids) => {
+            if (conversationId !== null && ids.includes(conversationId)) openConversation(null)
           }}
           onClose={() => {
             panels.close('history')

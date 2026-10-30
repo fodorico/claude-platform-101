@@ -21,7 +21,10 @@ import type {
 } from '@tanstack/react-query'
 
 import type {
+  ConversationBulkAction,
+  ConversationBulkResult,
   ConversationRead,
+  ConversationUpdate,
   ExchangeRead,
   HTTPValidationError,
   HealthRead,
@@ -65,7 +68,8 @@ export const getListConversationsUrl = (params?: ListConversationsParams) => {
 }
 
 /**
- * Return the conversations with the most recent activity first.
+ * Return the active (or, with `archived=true`, the archived) conversations, most recent
+ * activity first.
  * @summary List Conversations
  */
 export const listConversations = async (
@@ -182,6 +186,310 @@ export function useListConversations<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getBulkUpdateConversationsUrl = () => {
+  return `/api/conversations/bulk`
+}
+
+/**
+ * Archive, bring back or delete several conversations at once; unknown ids are skipped.
+ * @summary Bulk Update Conversations
+ */
+export const bulkUpdateConversations = async (
+  conversationBulkAction: ConversationBulkAction,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationBulkResult> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<ConversationBulkResult>(getBulkUpdateConversationsUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(conversationBulkAction),
+  })
+}
+
+export const getBulkUpdateConversationsMutationKey = () => ['bulkUpdateConversations'] as const
+
+export const getBulkUpdateConversationsMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateConversations>>,
+    TError,
+    BulkUpdateConversationsMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkUpdateConversations>>,
+  TError,
+  BulkUpdateConversationsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getBulkUpdateConversationsMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkUpdateConversations>>,
+    BulkUpdateConversationsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return bulkUpdateConversations(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type BulkUpdateConversationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkUpdateConversations>>
+>
+export type BulkUpdateConversationsMutationBody = ConversationBulkAction
+export type BulkUpdateConversationsMutationError = HTTPValidationError
+export type BulkUpdateConversationsMutationVariables = { data: ConversationBulkAction }
+
+/**
+ * @summary Bulk Update Conversations
+ */
+export const useBulkUpdateConversations = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof bulkUpdateConversations>>,
+      TError,
+      BulkUpdateConversationsMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof bulkUpdateConversations>>,
+  TError,
+  BulkUpdateConversationsMutationVariables,
+  TContext
+> => {
+  return useMutation(getBulkUpdateConversationsMutationOptions(options), queryClient)
+}
+
+export const getDeleteConversationUrl = (conversationId: number) => {
+  return `/api/conversations/${conversationId}`
+}
+
+/**
+ * Delete a conversation and its messages. This can't be undone.
+ * @summary Delete Conversation
+ */
+export const deleteConversation = async (
+  conversationId: number,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeleteConversationUrl(conversationId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteConversationMutationKey = () => ['deleteConversation'] as const
+
+export const getDeleteConversationMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteConversation>>,
+    TError,
+    DeleteConversationMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteConversation>>,
+  TError,
+  DeleteConversationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteConversationMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteConversation>>,
+    DeleteConversationMutationVariables
+  > = (props) => {
+    const { conversationId } = props ?? {}
+
+    return deleteConversation(conversationId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteConversation>>
+>
+
+export type DeleteConversationMutationError = HTTPValidationError
+export type DeleteConversationMutationVariables = { conversationId: number }
+
+/**
+ * @summary Delete Conversation
+ */
+export const useDeleteConversation = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteConversation>>,
+      TError,
+      DeleteConversationMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteConversation>>,
+  TError,
+  DeleteConversationMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteConversationMutationOptions(options), queryClient)
+}
+
+export const getUpdateConversationUrl = (conversationId: number) => {
+  return `/api/conversations/${conversationId}`
+}
+
+/**
+ * Rename a conversation, archive it or bring it back.
+ * @summary Update Conversation
+ */
+export const updateConversation = async (
+  conversationId: number,
+  conversationUpdate: ConversationUpdate,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationRead> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<ConversationRead>(getUpdateConversationUrl(conversationId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(conversationUpdate),
+  })
+}
+
+export const getUpdateConversationMutationKey = () => ['updateConversation'] as const
+
+export const getUpdateConversationMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateConversation>>,
+    TError,
+    UpdateConversationMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateConversation>>,
+  TError,
+  UpdateConversationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdateConversationMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateConversation>>,
+    UpdateConversationMutationVariables
+  > = (props) => {
+    const { conversationId, data } = props ?? {}
+
+    return updateConversation(conversationId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateConversation>>
+>
+export type UpdateConversationMutationBody = ConversationUpdate
+export type UpdateConversationMutationError = HTTPValidationError
+export type UpdateConversationMutationVariables = {
+  conversationId: number
+  data: ConversationUpdate
+}
+
+/**
+ * @summary Update Conversation
+ */
+export const useUpdateConversation = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateConversation>>,
+      TError,
+      UpdateConversationMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateConversation>>,
+  TError,
+  UpdateConversationMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdateConversationMutationOptions(options), queryClient)
 }
 
 export const getListConversationMessagesUrl = (conversationId: number) => {

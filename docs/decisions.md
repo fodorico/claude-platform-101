@@ -53,3 +53,8 @@
   key, and the offered models come from `ANTHROPIC_MODELS` / `GEMINI_MODELS`. Providers without
   a key are listed but disabled in the picker. The migration turned each earlier exchange into its
   own conversation and inferred its provider from the model name. `GET /api/messages` was removed.
+- **2026-10-30 — Managing chats.** Archiving is a nullable `archived_at` on conversations (not a
+  separate table): archived chats are listed apart (`GET /api/conversations?archived=true`) and
+  writing in one brings it back. Deleting is permanent and removes the messages (database
+  cascade); the UI always asks for confirmation. Several chats are archived, restored or deleted
+  with one request (`POST /api/conversations/bulk`, up to 100 ids, unknown ids skipped).

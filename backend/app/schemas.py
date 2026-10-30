@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import Provider
 
@@ -38,8 +39,37 @@ class ConversationRead(BaseModel):
 
     id: int
     title: str
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ConversationUpdate(BaseModel):
+    """Rename and/or archive a conversation; fields left out stay as they are."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    archived: bool | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("The title can't be empty")
+        return value
+
+
+class ConversationBulkAction(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=100)
+    action: Literal["archive", "unarchive", "delete"]
+
+
+class ConversationBulkResult(BaseModel):
+    """How many of the given conversations existed and were changed."""
+
+    affected: int
 
 
 class ProviderRead(BaseModel):

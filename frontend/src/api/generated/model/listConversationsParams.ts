@@ -11,4 +11,5 @@ export type ListConversationsParams = {
    * @maximum 100
    */
   limit?: number
+  archived?: boolean
 }

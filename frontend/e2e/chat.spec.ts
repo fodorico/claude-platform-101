@@ -72,11 +72,10 @@ test('a new chat gets its own URL and a title in the history', async ({ page }) 
 
   await page.getByRole('button', { name: 'History' }).click()
   const history = page.getByRole('complementary', { name: 'History' })
-  await expect(history.getByRole('button', { name: 'Chat: Brand new topic' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
-  await expect(history.getByRole('button', { name: 'Earlier chat' })).toBeVisible()
+  await expect(
+    history.getByRole('button', { name: 'Chat: Brand new topic', exact: true }),
+  ).toHaveAttribute('aria-current', 'page')
+  await expect(history.getByRole('button', { name: 'Earlier chat', exact: true })).toBeVisible()
 })
 
 test('sends to the model picked in the header', async ({ page }) => {
