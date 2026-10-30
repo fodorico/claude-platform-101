@@ -16,7 +16,21 @@ class ExchangeRead(BaseModel):
     prompt: str
     reply: str
     model: str
+    stop_reason: str
+    input_tokens: int
+    output_tokens: int
+    duration_ms: int | None
+    first_token_ms: int | None
     created_at: datetime
+
+
+class ModelSettingsRead(BaseModel):
+    """How the API calls the model, shown in the frontend's request details panel."""
+
+    provider: str
+    model: str
+    max_tokens: int
+    system_prompt: str
 
 
 class HealthRead(BaseModel):

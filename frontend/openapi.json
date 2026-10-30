@@ -8,13 +8,43 @@
             "title": "Created At",
             "type": "string"
           },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "first_token_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Token Ms"
+          },
           "id": {
             "title": "Id",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
             "type": "integer"
           },
           "model": {
             "title": "Model",
             "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
           },
           "prompt": {
             "title": "Prompt",
@@ -23,6 +53,10 @@
           "reply": {
             "title": "Reply",
             "type": "string"
+          },
+          "stop_reason": {
+            "title": "Stop Reason",
+            "type": "string"
           }
         },
         "required": [
@@ -30,6 +64,11 @@
           "prompt",
           "reply",
           "model",
+          "stop_reason",
+          "input_tokens",
+          "output_tokens",
+          "duration_ms",
+          "first_token_ms",
           "created_at"
         ],
         "title": "ExchangeRead",
@@ -74,6 +113,35 @@
           "content"
         ],
         "title": "MessageCreate",
+        "type": "object"
+      },
+      "ModelSettingsRead": {
+        "description": "How the API calls the model, shown in the frontend's request details panel.",
+        "properties": {
+          "max_tokens": {
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "system_prompt": {
+            "title": "System Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "max_tokens",
+          "system_prompt"
+        ],
+        "title": "ModelSettingsRead",
         "type": "object"
       },
       "ValidationError": {
@@ -271,6 +339,28 @@
         "summary": "Stream Message",
         "tags": [
           "messages"
+        ]
+      }
+    },
+    "/api/model-settings": {
+      "get": {
+        "description": "Return the provider, model and request settings used to answer messages.",
+        "operationId": "get_model_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSettingsRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Model Settings",
+        "tags": [
+          "model settings"
         ]
       }
     }

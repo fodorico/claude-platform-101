@@ -7,8 +7,13 @@
 
 export interface ExchangeRead {
   created_at: string
+  duration_ms: number | null
+  first_token_ms: number | null
   id: number
+  input_tokens: number
   model: string
+  output_tokens: number
   prompt: string
   reply: string
+  stop_reason: string
 }

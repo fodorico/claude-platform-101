@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    @property
+    def llm_model(self) -> str:
+        return self.gemini_model if self.llm_provider == "gemini" else self.anthropic_model
+
 
 @lru_cache
 def get_settings() -> Settings:
